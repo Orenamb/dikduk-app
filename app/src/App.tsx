@@ -1491,16 +1491,22 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
   slide: LessonSlide; idx: number; total: number; onNext: () => void; onPrev: () => void;
   bookmarked: boolean; onBookmark: () => void; dark: boolean;
 }) {
+  const [speakingWord, setSpeakingWord] = useState<string | null>(null);
+  const [speechRate, setSpeechRate] = useState(1);
   const style = colorStyles[slide.color] ?? colorStyles.blue;
   const ch    = CHAPTERS.find(c => idx >= c.startIdx && idx <= c.endIdx);
   const lessonInChapter = ch ? idx - ch.startIdx + 1 : idx + 1;
   const lessonsInChapter = ch ? ch.endIdx - ch.startIdx + 1 : total;
   const overallPct = ((idx + 1) / total) * 100;
-  const speak = (text: string) => {
+  const speak = (text: string, rate: number = 1, onEnd?: () => void) => {
     if (!window.speechSynthesis) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'he-IL'; speechSynthesis.speak(u);
+    u.lang = 'he-IL';
+    u.rate = rate;
+    u.pitch = 1;
+    if (onEnd) u.onend = onEnd;
+    speechSynthesis.speak(u);
   };
 
   return (
@@ -1523,6 +1529,14 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
               'w-3 bg-slate-200'
             }`} />
           ))}
+        </div>
+        
+        {/* TTS Speed Control */}
+        <div className="mt-4 flex items-center gap-3 justify-center">
+          <span className="text-xs font-bold text-slate-400">מהירות:</span>
+          <button onClick={() => setSpeechRate(Math.max(0.5, speechRate - 0.25))} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${dark ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>−</button>
+          <span className="text-xs font-bold text-slate-500 w-12 text-center">{(speechRate * 100).toFixed(0)}%</span>
+          <button onClick={() => setSpeechRate(Math.min(2, speechRate + 0.25))} className={`px-2 py-1 rounded text-xs font-bold transition-colors ${dark ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>+</button>
         </div>
       </div>
 
@@ -1554,8 +1568,19 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
                   const exStyle = colorStyles[ex.color]?.exBg ?? colorStyles.blue.exBg;
                   return (
                     <div key={i} className={`rounded-2xl p-5 border-2 ${exStyle} relative`}>
-                      <button onClick={() => speak(ex.word)} className="absolute top-2 left-2 w-7 h-7 flex items-center justify-center rounded-full bg-white/60 hover:bg-white transition-colors opacity-60 hover:opacity-100" title="השמע">
-                        <Volume2 size={13} />
+                      <button 
+                        onClick={() => {
+                          setSpeakingWord(ex.word);
+                          speak(ex.word, speechRate, () => setSpeakingWord(null));
+                        }}
+                        className={`absolute top-3 left-3 w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${
+                          speakingWord === ex.word 
+                            ? 'bg-indigo-500 text-white shadow-lg' 
+                            : dark ? 'bg-slate-600 hover:bg-slate-500 text-slate-200' : 'bg-white/70 hover:bg-white text-slate-700'
+                        }`}
+                        title="השמע"
+                      >
+                        <Volume2 size={18} className={speakingWord === ex.word ? 'animate-pulse' : ''} />
                       </button>
                       <div className="text-5xl font-serif font-black text-center mb-3 leading-tight tracking-widest">{ex.word}</div>
                       <p className="text-sm text-center font-medium opacity-80 leading-relaxed">{ex.explanation}</p>
