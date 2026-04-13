@@ -1071,6 +1071,7 @@ export default function App() {
   const [screen, setScreen]       = useState<Screen>('home');
   const [lessonIdx, setLessonIdx] = useState(0);
   const [quizData, setQuizData]   = useState<ChapterQuiz | null>(null);
+  const [quizAnswered, setQuizAnswered] = useState(false);
   const [streak,   setStreak]     = useState(0);
   const [mistakes, setMistakes]   = useState<MistakeLog[]>(() => {
     try { return JSON.parse(localStorage.getItem('dikduk-mistakes') || '[]'); } catch { return []; }
@@ -1162,26 +1163,27 @@ export default function App() {
     setWeakChapterIdxs(prev => prev.filter(v => v !== ci));
   };
 
-  const startLesson = (idx = 0) => { setLessonIdx(idx); setQuizData(null); setScreen('lesson'); };
+  const startLesson = (idx = 0) => { setLessonIdx(idx); setQuizData(null); setQuizAnswered(false); setScreen('lesson'); };
 
   const nextLesson = () => {
     const q = CHAPTER_QUIZZES[lessonIdx];
-    if (q) { setQuizData(q); setScreen('summary'); return; }
+    if (q) { setQuizData(q); setQuizAnswered(false); setScreen('summary'); return; }
     if (lessonIdx < lessons.length - 1) setLessonIdx(l => l + 1);
     else setScreen('complete');
   };
   const prevLesson = () => {
-    if (screen === 'quiz') { setScreen('lesson'); return; }
+    if (screen === 'quiz') { setScreen('summary'); return; }
     if (lessonIdx > 0) setLessonIdx(l => l - 1);
     else setScreen('home');
   };
   const continueAfterQuiz = () => {
+    setQuizAnswered(false);
     if (lessonIdx < lessons.length - 1) { setLessonIdx(l => l + 1); setScreen('lesson'); }
     else setScreen('complete');
   };
 
   const goBack = () => {
-    if (screen === 'quiz') { setScreen('lesson'); return; }
+    if (screen === 'quiz') { setScreen('summary'); return; }
     if (screen === 'summary') { setScreen('lesson'); return; }
     if (screen === 'lesson') { prevLesson(); return; }
     if (screen === 'mixedquiz') { setScreen('complete'); return; }
@@ -1190,12 +1192,24 @@ export default function App() {
 
   const goForward = () => {
     if (screen === 'quiz') { continueAfterQuiz(); return; }
-    if (screen === 'summary') { setScreen('quiz'); return; }
+    if (screen === 'summary') { continueAfterQuiz(); return; }
     if (screen === 'lesson') { nextLesson(); return; }
     if (screen === 'home') { startLesson(lessonIdx > 0 ? lessonIdx : 0); return; }
+    if (screen === 'lab' || screen === 'daily' || screen === 'diagnostic' || screen === 'mistakes') { startLesson(lessonIdx > 0 ? lessonIdx : 0); return; }
     if (screen === 'complete') { setScreen('mixedquiz'); return; }
+    if (screen === 'mixedquiz') { setScreen('complete'); return; }
     startLesson(lessonIdx > 0 ? lessonIdx : 0);
   };
+
+  const bottomPrimaryAction = (() => {
+    if (screen === 'home') return { label: lessonIdx > 0 ? 'המשך' : 'התחל', icon: '▶', action: () => startLesson(lessonIdx > 0 ? lessonIdx : 0), active: false };
+    if (screen === 'lesson') return { label: CHAPTER_QUIZZES[lessonIdx] ? 'לסיכום' : lessonIdx === lessons.length - 1 ? 'סיום' : 'הבא', icon: '⟵', action: nextLesson, active: true };
+    if (screen === 'summary') return { label: 'דלג', icon: '⤼', action: continueAfterQuiz, active: true };
+    if (screen === 'quiz') return { label: quizAnswered ? 'המשך' : 'דלג', icon: '⟵', action: continueAfterQuiz, active: true };
+    if (screen === 'complete') return { label: 'חידון', icon: '🧠', action: () => setScreen('mixedquiz'), active: true };
+    if (screen === 'mixedquiz') return { label: 'סיים', icon: '✓', action: () => setScreen('complete'), active: true };
+    return { label: 'לשיעור', icon: '▶', action: () => startLesson(lessonIdx > 0 ? lessonIdx : 0), active: false };
+  })();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1293,8 +1307,9 @@ export default function App() {
       <main className="max-w-3xl mx-auto p-3 pb-28 sm:p-4 sm:pb-28 md:px-8 md:pt-8 md:pb-28">
         {screen === 'home'      && <HomeScreen onStart={startLesson} onHome={() => setScreen('home')} onLab={() => setScreen('lab')} onDiagnostic={() => setScreen('diagnostic')} onDaily={() => setScreen('daily')} onMistakes={() => setScreen('mistakes')} lessonIdx={lessonIdx} maxReached={maxReached} streak={streak} bookmarks={bookmarks} weakChapterIdxs={weakChapterIdxs} mistakesCount={mistakes.length} dark={dark} />}
         {screen === 'lesson'    && <LessonScreen slide={lessons[lessonIdx]} idx={lessonIdx} total={lessons.length} onNext={nextLesson} onPrev={prevLesson} bookmarked={bookmarks.includes(lessonIdx)} onBookmark={() => toggleBookmark(lessonIdx)} dark={dark} />}
-        {screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onBack={() => setScreen('lesson')} dark={dark} />}
-        {screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('lesson')} onAnswered={(ok, picked) => {
+        {screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onSkip={continueAfterQuiz} onBack={() => setScreen('lesson')} dark={dark} />}
+        {screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('summary')} onAnswered={(ok, picked) => {
+          setQuizAnswered(true);
           if (ok) {
             clearWeakCurrentChapter();
           } else {
@@ -1321,26 +1336,27 @@ export default function App() {
         className={`fixed bottom-0 left-0 right-0 z-40 border-t ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="max-w-3xl mx-auto flex">
-          {([
-            { key: 'home',       icon: '🏠', label: 'בית',       action: () => setScreen('home'),       active: screen === 'home' },
-            { key: 'lesson',     icon: '▶',  label: 'שיעור',     action: () => startLesson(lessonIdx),  active: screen === 'lesson' || screen === 'quiz' || screen === 'complete' || screen === 'mixedquiz' },
-            { key: 'lab',        icon: '🧪', label: 'מעבדה',     action: () => setScreen('lab'),        active: screen === 'lab' },
-            { key: 'daily',      icon: '🗓️', label: 'אתגר יומי', action: () => setScreen('daily'),      active: screen === 'daily' },
-            { key: 'mistakes',   icon: '📓', label: mistakes.length ? `טעויות (${mistakes.length})` : 'טעויות', action: () => setScreen('mistakes'), active: screen === 'mistakes' },
-          ] as { key: string; icon: string; label: string; action: () => void; active: boolean }[]).map(tab => (
+        <div className="max-w-3xl mx-auto grid grid-cols-5 gap-1 px-2 py-2">
+          {[
+            { key: 'prev', icon: '⟶', label: 'הקודם', action: goBack, active: false, primary: false },
+            { key: 'home', icon: '🏠', label: 'בית', action: () => setScreen('home'), active: screen === 'home', primary: false },
+            { key: 'next', icon: bottomPrimaryAction.icon, label: bottomPrimaryAction.label, action: bottomPrimaryAction.action, active: bottomPrimaryAction.active, primary: true },
+            { key: 'lab', icon: '🧪', label: 'מעבדה', action: () => setScreen('lab'), active: screen === 'lab', primary: false },
+            { key: 'mistakes', icon: '📓', label: 'טעויות', action: () => setScreen('mistakes'), active: screen === 'mistakes', primary: false },
+          ].map(tab => (
             <button
               key={tab.key}
               onClick={tab.action}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors active:scale-95 ${
-                tab.active
-                  ? dark ? 'text-indigo-300' : 'text-indigo-700'
-                  : dark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-2xl py-2 transition-all active:scale-95 ${
+                tab.primary
+                  ? 'bg-gradient-to-l from-indigo-600 to-violet-600 text-white shadow-lg'
+                  : tab.active
+                    ? dark ? 'bg-slate-800 text-indigo-300' : 'bg-indigo-50 text-indigo-700'
+                    : dark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <span className="text-xl leading-none">{tab.icon}</span>
-              <span className={`text-[10px] font-bold leading-tight ${tab.active ? 'opacity-100' : 'opacity-60'}`}>{tab.label}</span>
-              {tab.active && <span className={`w-4 h-0.5 rounded-full mt-0.5 ${dark ? 'bg-indigo-400' : 'bg-indigo-600'}`} />}
+              <span className={`${tab.primary ? 'text-2xl' : 'text-xl'} leading-none`}>{tab.icon}</span>
+              <span className={`font-bold leading-tight ${tab.primary ? 'text-[11px]' : 'text-[10px]'}`}>{tab.label}</span>
             </button>
           ))}
         </div>
@@ -1695,7 +1711,7 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
   );
 }
 
-function ChapterSummaryScreen({ idx, onStartQuiz, onBack, dark }: { idx: number; onStartQuiz: () => void; onBack: () => void; dark: boolean }) {
+function ChapterSummaryScreen({ idx, onStartQuiz, onSkip, onBack, dark }: { idx: number; onStartQuiz: () => void; onSkip: () => void; onBack: () => void; dark: boolean }) {
   const chapter = CHAPTERS.find(c => idx >= c.startIdx && idx <= c.endIdx);
   if (!chapter) return null;
   const chapterLessons = lessons.slice(chapter.startIdx, chapter.endIdx + 1);
@@ -1718,9 +1734,12 @@ function ChapterSummaryScreen({ idx, onStartQuiz, onBack, dark }: { idx: number;
           </ul>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={onBack} className={`flex-1 py-3 rounded-2xl font-bold transition-colors ${dark ? 'bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}>
             חזרה לשיעור
+          </button>
+          <button onClick={onSkip} className={`flex-1 py-3 rounded-2xl font-bold transition-colors ${dark ? 'bg-amber-900/40 hover:bg-amber-900/60 text-amber-200 border border-amber-700' : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200'}`}>
+            דלג לפרק הבא
           </button>
           <button onClick={onStartQuiz} className="flex-1 py-3 rounded-2xl font-bold bg-gradient-to-l from-indigo-600 to-violet-600 text-white hover:shadow-lg transition-all">
             התחל בחינה 🧠
@@ -1816,7 +1835,7 @@ function QuizView({ quiz, onContinue, onBack, onAnswered, dark = false }: { quiz
 
       <div className="flex gap-3">
         <button onClick={onBack} className={`flex-shrink-0 font-bold px-4 py-4 rounded-2xl transition-all active:scale-95 text-sm ${dark ? 'bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-          חזרה לשיעור
+          חזרה לסיכום
         </button>
         <button
           onClick={() => setHintUsed(true)}
