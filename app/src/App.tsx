@@ -5,6 +5,25 @@ import {
   GraduationCap, FlaskConical, X, Volume2, Copy, Flame, Music
 } from 'lucide-react';
 import { analyzeWord, type AnalyzedLetter } from './engine/grammarRules';
+import {
+  ADMIN_ACCESS_CODE,
+  LICENSE_STORAGE_KEY,
+  SESSION_STORAGE_KEY,
+  changeLicenseStatus,
+  computeRecordState,
+  createAdminSession,
+  createLicenseRecord,
+  createSeedLicenses,
+  createSessionFromRecord,
+  extendLicenseRecord,
+  normalizeUsername,
+  runLicenseSelfTest,
+  touchLicense,
+  validateLicenseAccess,
+  type LicenseRecord,
+  type LicenseSelfTestReport,
+  type LicenseSession,
+} from './licenseSystem';
 
 interface Example { word: string; explanation: string; color: string; }
 interface LessonSlide {
@@ -1056,7 +1075,62 @@ const WHY_TIPS: Record<string, string> = {
 };
 
 // ── Main App ──────────────────────────────────────────────────
-type Screen = 'home' | 'lesson' | 'quiz' | 'lab' | 'complete' | 'mixedquiz' | 'diagnostic' | 'daily' | 'mistakes' | 'summary';
+type Screen = 'access' | 'admin' | 'home' | 'lesson' | 'quiz' | 'lab' | 'complete' | 'mixedquiz' | 'diagnostic' | 'daily' | 'mistakes' | 'summary';
+
+function readStoredLicenses(): LicenseRecord[] {
+  try {
+    const raw = localStorage.getItem(LICENSE_STORAGE_KEY);
+    if (!raw) return createSeedLicenses();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed as LicenseRecord[] : createSeedLicenses();
+  } catch {
+    return createSeedLicenses();
+  }
+}
+
+function readStoredSession(): LicenseSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LicenseSession>;
+    if (
+      parsed &&
+      (parsed.role === 'user' || parsed.role === 'admin') &&
+      typeof parsed.username === 'string' &&
+      typeof parsed.displayName === 'string' &&
+      typeof parsed.key === 'string' &&
+      typeof parsed.activatedAt === 'string'
+    ) {
+      return parsed as LicenseSession;
+    }
+  } catch {}
+  return null;
+}
+
+function formatAccessError(reason: ReturnType<typeof validateLicenseAccess>['reason']): string {
+  switch (reason) {
+    case 'invalid-format':
+      return 'פורמט המפתח אינו תקין.';
+    case 'invalid-signature':
+      return 'המפתח שונה או נחתם בצורה לא תקינה.';
+    case 'wrong-product':
+      return 'המפתח שייך למוצר אחר.';
+    case 'username-mismatch':
+      return 'שם המשתמש לא תואם למפתח.';
+    case 'key-not-found':
+      return 'המפתח לא נמצא ברשימת הרישיונות המקומית.';
+    case 'revoked':
+      return 'הרישיון הזה בוטל.';
+    case 'expired':
+      return 'פג תוקף הרישיון.';
+    default:
+      return 'לא ניתן לאמת את נתוני הכניסה.';
+  }
+}
+
+function formatLicenseDate(value: string): string {
+  return new Date(value).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
 
 export default function App() {
   const [dark,       setDark]       = useState(() => localStorage.getItem('dikduk-dark') === '1');
@@ -1068,7 +1142,14 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('dikduk-bookmarks') || '[]'); } catch { return []; }
   });
   const [showKeys,   setShowKeys]   = useState(false);
-  const [screen, setScreen]       = useState<Screen>('home');
+  const [licenseRecords, setLicenseRecords] = useState<LicenseRecord[]>(() => readStoredLicenses());
+  const [authSession, setAuthSession] = useState<LicenseSession | null>(() => readStoredSession());
+  const [licenseReport, setLicenseReport] = useState<LicenseSelfTestReport>(() => runLicenseSelfTest());
+  const [screen, setScreen]       = useState<Screen>(() => {
+    const session = readStoredSession();
+    if (!session) return 'access';
+    return session.role === 'admin' ? 'admin' : 'home';
+  });
   const [lessonIdx, setLessonIdx] = useState(0);
   const [quizData, setQuizData]   = useState<ChapterQuiz | null>(null);
   const [quizAnswered, setQuizAnswered] = useState(false);
@@ -1091,6 +1172,11 @@ export default function App() {
   // Persist UI prefs
   useEffect(() => { localStorage.setItem('dikduk-dark', dark ? '1' : '0'); }, [dark]);
   useEffect(() => { localStorage.setItem('dikduk-fs', String(fontScale)); }, [fontScale]);
+  useEffect(() => { localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(licenseRecords)); }, [licenseRecords]);
+  useEffect(() => {
+    if (authSession) localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(authSession));
+    else localStorage.removeItem(SESSION_STORAGE_KEY);
+  }, [authSession]);
   useEffect(() => {
     // Tailwind font-size utilities are rem-based, so update the html root size.
     document.documentElement.style.fontSize = `${fontScale}%`;
@@ -1146,6 +1232,23 @@ export default function App() {
   }, [mistakes]);
 
   useEffect(() => {
+    if (!authSession) {
+      if (screen !== 'access') setScreen('access');
+      return;
+    }
+    if (authSession.role !== 'user') return;
+    const result = validateLicenseAccess({
+      username: authSession.username,
+      key: authSession.key,
+      licenses: licenseRecords,
+    });
+    if (!result.ok) {
+      setAuthSession(null);
+      setScreen('access');
+    }
+  }, [authSession, licenseRecords, screen]);
+
+  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
@@ -1163,7 +1266,84 @@ export default function App() {
     setWeakChapterIdxs(prev => prev.filter(v => v !== ci));
   };
 
-  const startLesson = (idx = 0) => { setLessonIdx(idx); setQuizData(null); setQuizAnswered(false); setScreen('lesson'); };
+  const startLesson = (idx = 0) => {
+    if (!authSession) { setScreen('access'); return; }
+    setLessonIdx(idx);
+    setQuizData(null);
+    setQuizAnswered(false);
+    setScreen('lesson');
+  };
+
+  const loginWithLicense = (username: string, key: string) => {
+    const nowIso = new Date().toISOString();
+    const result = validateLicenseAccess({ username, key, licenses: licenseRecords, nowIso });
+    if (!result.ok || !result.record) return { ok: false, message: formatAccessError(result.reason) };
+
+    const touched = touchLicense(result.record, nowIso);
+    setLicenseRecords(prev => prev.map(item => item.id === touched.id ? touched : item));
+    setAuthSession(createSessionFromRecord(touched, nowIso));
+    setScreen('home');
+    return { ok: true };
+  };
+
+  const loginAsAdmin = (code: string) => {
+    if (code.trim() !== ADMIN_ACCESS_CODE) return { ok: false, message: 'קוד הניהול המקומי שגוי.' };
+    setAuthSession(createAdminSession());
+    setScreen('admin');
+    return { ok: true };
+  };
+
+  const logout = () => {
+    setAuthSession(null);
+    setScreen('access');
+    setQuizData(null);
+    setQuizAnswered(false);
+  };
+
+  const createManagedLicense = (input: { username: string; displayName: string; companyId: string; daysValid: number; notes?: string }) => {
+    const record = createLicenseRecord(input);
+    setLicenseRecords(prev => [record, ...prev.filter(item => item.id !== record.id)]);
+    return record;
+  };
+
+  const toggleManagedLicense = (recordId: string) => {
+    setLicenseRecords(prev => prev.map(item => item.id === recordId
+      ? changeLicenseStatus(item, item.status === 'revoked' ? 'active' : 'revoked')
+      : item));
+  };
+
+  const renewManagedLicense = (recordId: string, days = 30) => {
+    setLicenseRecords(prev => prev.map(item => item.id === recordId ? extendLicenseRecord(item, days) : item));
+  };
+
+  const deleteManagedLicense = (recordId: string) => {
+    setLicenseRecords(prev => prev.filter(item => item.id !== recordId));
+  };
+
+  const resetManagedLicenses = () => {
+    const seeded = createSeedLicenses();
+    setLicenseRecords(seeded);
+    setLicenseReport(runLicenseSelfTest());
+  };
+
+  const impersonateManagedUser = (recordId: string) => {
+    const target = licenseRecords.find(item => item.id === recordId);
+    if (!target) return { ok: false, message: 'לא נמצא רישיון מתאים.' };
+    const nowIso = new Date().toISOString();
+    const result = validateLicenseAccess({ username: target.username, key: target.key, licenses: licenseRecords, nowIso });
+    if (!result.ok || !result.record) return { ok: false, message: formatAccessError(result.reason) };
+    const touched = touchLicense(result.record, nowIso);
+    setLicenseRecords(prev => prev.map(item => item.id === touched.id ? touched : item));
+    setAuthSession(createSessionFromRecord(touched, nowIso));
+    setScreen('home');
+    return { ok: true };
+  };
+
+  const runManagedSelfTest = () => {
+    const report = runLicenseSelfTest();
+    setLicenseReport(report);
+    return report;
+  };
 
   const nextLesson = () => {
     const q = CHAPTER_QUIZZES[lessonIdx];
@@ -1183,14 +1363,18 @@ export default function App() {
   };
 
   const goBack = () => {
+    if (screen === 'access') return;
+    if (screen === 'admin') { setScreen('home'); return; }
     if (screen === 'quiz') { setScreen('summary'); return; }
     if (screen === 'summary') { setScreen('lesson'); return; }
     if (screen === 'lesson') { prevLesson(); return; }
     if (screen === 'mixedquiz') { setScreen('complete'); return; }
-    setScreen('home');
+    setScreen(authSession ? 'home' : 'access');
   };
 
   const goForward = () => {
+    if (screen === 'access') return;
+    if (screen === 'admin') { setScreen('home'); return; }
     if (screen === 'quiz') { continueAfterQuiz(); return; }
     if (screen === 'summary') { continueAfterQuiz(); return; }
     if (screen === 'lesson') { nextLesson(); return; }
@@ -1202,6 +1386,8 @@ export default function App() {
   };
 
   const bottomPrimaryAction = (() => {
+    if (screen === 'access') return { label: 'כניסה', icon: '🔐', action: () => setScreen('access' as Screen), active: false };
+    if (screen === 'admin') return { label: 'ללימוד', icon: '▶', action: () => setScreen('home'), active: false };
     if (screen === 'home') return { label: lessonIdx > 0 ? 'המשך' : 'התחל', icon: '▶', action: () => startLesson(lessonIdx > 0 ? lessonIdx : 0), active: false };
     if (screen === 'lesson') return { label: CHAPTER_QUIZZES[lessonIdx] ? 'לסיכום' : lessonIdx === lessons.length - 1 ? 'סיום' : 'הבא', icon: '⟵', action: nextLesson, active: true };
     if (screen === 'summary') return { label: 'דלג', icon: '⤼', action: continueAfterQuiz, active: true };
@@ -1234,7 +1420,7 @@ export default function App() {
 
   return (
     <div
-      data-version="2026-04-13-v5"
+      data-version="2026-04-13-v6-license-local"
       className={`min-h-screen font-sans selection:bg-indigo-100 ${dark ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}
       dir="rtl">
       {/* Keyboard shortcuts overlay */}
@@ -1268,16 +1454,19 @@ export default function App() {
       <header className="bg-gradient-to-l from-indigo-900 to-violet-800 text-white px-4 py-3 shadow-xl sticky top-0 z-30">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-0.5">
-            <button onClick={goBack} className="p-2.5 rounded-xl hover:bg-white/10 transition-colors active:scale-95" title="חזור">
+            <button onClick={goBack} disabled={screen === 'access'} className={`p-2.5 rounded-xl transition-colors active:scale-95 ${screen === 'access' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`} title="חזור">
               <ChevronRight size={22} />
             </button>
-            <button onClick={goForward} className="p-2.5 rounded-xl hover:bg-white/10 transition-colors active:scale-95" title="קדימה">
+            <button onClick={goForward} disabled={screen === 'access'} className={`p-2.5 rounded-xl transition-colors active:scale-95 ${screen === 'access' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`} title="קדימה">
               <ChevronLeft size={22} />
             </button>
           </div>
           <div className="flex items-center gap-2">
             <BookOpen size={22} className="text-indigo-200 hidden sm:block" />
-            <span className="text-sm sm:text-base font-extrabold tracking-tight">מסע הדקדוק — מסורת הקריאה</span>
+            <div className="text-center">
+              <span className="block text-sm sm:text-base font-extrabold tracking-tight">מסע הדקדוק — מסורת הקריאה</span>
+              {authSession && <span className="block text-[11px] sm:text-xs text-indigo-100/80">{authSession.displayName}{authSession.role === 'admin' ? ' · מנהל' : ''}</span>}
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             {streak > 0 && (
@@ -1296,19 +1485,47 @@ export default function App() {
             </button>
             {/* Shortcuts */}
             <button onClick={() => setShowKeys(k => !k)} className="hidden sm:flex p-2 rounded-xl hover:bg-white/10 transition-colors text-xs font-bold" title="קיצורי מקלדת (?)">?</button>
+            {authSession?.role === 'admin' && (
+              <button onClick={() => setScreen('admin')} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold hidden sm:flex">
+                ניהול
+              </button>
+            )}
+            {authSession && (
+              <button onClick={logout} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold hidden sm:flex">
+                יציאה
+              </button>
+            )}
+            {authSession && screen !== 'access' && (
             <button onClick={() => setScreen('lab')} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold flex items-center gap-1.5 hidden sm:flex">
               <FlaskConical size={15} />
               <span>מעבדה</span>
             </button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto p-3 pb-28 sm:p-4 sm:pb-28 md:px-8 md:pt-8 md:pb-28">
-        {screen === 'home'      && <HomeScreen onStart={startLesson} onHome={() => setScreen('home')} onLab={() => setScreen('lab')} onDiagnostic={() => setScreen('diagnostic')} onDaily={() => setScreen('daily')} onMistakes={() => setScreen('mistakes')} lessonIdx={lessonIdx} maxReached={maxReached} streak={streak} bookmarks={bookmarks} weakChapterIdxs={weakChapterIdxs} mistakesCount={mistakes.length} dark={dark} />}
-        {screen === 'lesson'    && <LessonScreen slide={lessons[lessonIdx]} idx={lessonIdx} total={lessons.length} onNext={nextLesson} onPrev={prevLesson} bookmarked={bookmarks.includes(lessonIdx)} onBookmark={() => toggleBookmark(lessonIdx)} dark={dark} />}
-        {screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onSkip={continueAfterQuiz} onBack={() => setScreen('lesson')} dark={dark} />}
-        {screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('summary')} onAnswered={(ok, picked) => {
+        {screen === 'access'    && <AccessScreen onUserLogin={loginWithLicense} onAdminLogin={loginAsAdmin} demoLicenses={licenseRecords} dark={dark} />}
+        {screen === 'admin'     && authSession?.role === 'admin' && (
+          <AdminScreen
+            records={licenseRecords}
+            report={licenseReport}
+            onRunSelfTest={runManagedSelfTest}
+            onCreateRecord={createManagedLicense}
+            onToggleRecord={toggleManagedLicense}
+            onRenewRecord={renewManagedLicense}
+            onDeleteRecord={deleteManagedLicense}
+            onResetDemo={resetManagedLicenses}
+            onUseRecord={impersonateManagedUser}
+            onOpenLearning={() => setScreen('home')}
+            dark={dark}
+          />
+        )}
+        {authSession && screen === 'home'      && <HomeScreen onStart={startLesson} onHome={() => setScreen('home')} onLab={() => setScreen('lab')} onDiagnostic={() => setScreen('diagnostic')} onDaily={() => setScreen('daily')} onMistakes={() => setScreen('mistakes')} lessonIdx={lessonIdx} maxReached={maxReached} streak={streak} bookmarks={bookmarks} weakChapterIdxs={weakChapterIdxs} mistakesCount={mistakes.length} dark={dark} />}
+        {authSession && screen === 'lesson'    && <LessonScreen slide={lessons[lessonIdx]} idx={lessonIdx} total={lessons.length} onNext={nextLesson} onPrev={prevLesson} bookmarked={bookmarks.includes(lessonIdx)} onBookmark={() => toggleBookmark(lessonIdx)} dark={dark} />}
+        {authSession && screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onSkip={continueAfterQuiz} onBack={() => setScreen('lesson')} dark={dark} />}
+        {authSession && screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('summary')} onAnswered={(ok, picked) => {
           setQuizAnswered(true);
           if (ok) {
             clearWeakCurrentChapter();
@@ -1319,19 +1536,20 @@ export default function App() {
             setMistakes(prev => [{ at: new Date().toISOString(), chapter: quizData.chapter, question: quizData.q, selected: selectedText, correct: correctText }, ...prev]);
           }
         }} dark={dark} />}
-        {screen === 'lab'       && <LaboratoryView dark={dark} />}
-        {screen === 'diagnostic' && <DiagnosticScreen onBack={() => setScreen('home')} onDone={(score, total) => {
+        {authSession && screen === 'lab'       && <LaboratoryView dark={dark} />}
+        {authSession && screen === 'diagnostic' && <DiagnosticScreen onBack={() => setScreen('home')} onDone={(score, total) => {
           const pct = Math.round((score / total) * 100);
           const idx = pct < 40 ? 0 : pct < 70 ? 24 : 43;
           startLesson(idx);
         }} dark={dark} />}
-        {screen === 'daily' && <DailyChallengeScreen onBack={() => setScreen('home')} onGoLab={() => setScreen('lab')} dark={dark} />}
-        {screen === 'mistakes' && <MistakesScreen mistakes={mistakes} onBack={() => setScreen('home')} onStart={startLesson} onClear={() => setMistakes([])} dark={dark} />}
-        {screen === 'complete'  && <CompleteScreen onRestart={() => startLesson(0)} onLab={() => setScreen('lab')} onMixedQuiz={() => setScreen('mixedquiz')} dark={dark} />}
-        {screen === 'mixedquiz' && <MixedQuiz onDone={() => setScreen('complete')} />}
+        {authSession && screen === 'daily' && <DailyChallengeScreen onBack={() => setScreen('home')} onGoLab={() => setScreen('lab')} dark={dark} />}
+        {authSession && screen === 'mistakes' && <MistakesScreen mistakes={mistakes} onBack={() => setScreen('home')} onStart={startLesson} onClear={() => setMistakes([])} dark={dark} />}
+        {authSession && screen === 'complete'  && <CompleteScreen onRestart={() => startLesson(0)} onLab={() => setScreen('lab')} onMixedQuiz={() => setScreen('mixedquiz')} dark={dark} />}
+        {authSession && screen === 'mixedquiz' && <MixedQuiz onDone={() => setScreen('complete')} />}
       </main>
 
       {/* ── Bottom Navigation Bar ── */}
+      {authSession && screen !== 'access' && screen !== 'admin' && (
       <nav
         className={`fixed bottom-0 left-0 right-0 z-40 border-t ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -1361,6 +1579,327 @@ export default function App() {
           ))}
         </div>
       </nav>
+      )}
+    </div>
+  );
+}
+
+function AccessScreen({ onUserLogin, onAdminLogin, demoLicenses, dark }: {
+  onUserLogin: (username: string, key: string) => { ok: boolean; message?: string };
+  onAdminLogin: (code: string) => { ok: boolean; message?: string };
+  demoLicenses: LicenseRecord[];
+  dark: boolean;
+}) {
+  const [mode, setMode] = useState<'user' | 'admin'>('user');
+  const [username, setUsername] = useState('');
+  const [key, setKey] = useState('');
+  const [adminCode, setAdminCode] = useState(ADMIN_ACCESS_CODE);
+  const [error, setError] = useState('');
+  const activeDemoLicenses = demoLicenses.filter(record => computeRecordState(record) === 'active').slice(0, 3);
+
+  const submitUser = () => {
+    setError('');
+    const result = onUserLogin(username, key);
+    if (!result.ok) setError(result.message || 'לא ניתן להתחבר.');
+  };
+
+  const submitAdmin = () => {
+    setError('');
+    const result = onAdminLogin(adminCode);
+    if (!result.ok) setError(result.message || 'לא ניתן להתחבר.');
+  };
+
+  return (
+    <div className="mt-4 sm:mt-8 max-w-4xl mx-auto grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
+      <div className={`rounded-[2rem] border shadow-xl p-6 sm:p-8 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-2xl mb-4">
+            <Shield size={34} />
+          </div>
+          <h2 className={`text-3xl sm:text-4xl font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>כניסה עם מפתח גישה</h2>
+          <p className={`text-sm sm:text-base leading-relaxed max-w-xl mx-auto ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
+            זו גרסה מקומית מלאה עם ניהול רישיונות בדפדפן. אפשר להיכנס כלומד עם שם משתמש ומפתח, או כמנהל כדי ליצור ולבדוק משתמשים נוספים.
+          </p>
+        </div>
+
+        <div className={`inline-flex rounded-2xl p-1 mb-5 ${dark ? 'bg-slate-700' : 'bg-slate-100'}`}>
+          {[
+            { key: 'user', label: 'כניסת לומד' },
+            { key: 'admin', label: 'כניסת מנהל' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => { setMode(tab.key as 'user' | 'admin'); setError(''); }}
+              className={`px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${mode === tab.key ? (dark ? 'bg-slate-900 text-white shadow' : 'bg-white text-slate-900 shadow') : (dark ? 'text-slate-300' : 'text-slate-500')}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'user' ? (
+          <div className="space-y-4">
+            <div>
+              <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>שם משתמש</label>
+              <input
+                type="text"
+                dir="ltr"
+                value={username}
+                onChange={e => setUsername(normalizeUsername(e.target.value))}
+                placeholder="yael.cohen"
+                className={`w-full rounded-2xl border px-4 py-3 text-sm font-medium outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400'}`}
+              />
+            </div>
+            <div>
+              <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>מפתח גישה</label>
+              <textarea
+                dir="ltr"
+                rows={4}
+                value={key}
+                onChange={e => setKey(e.target.value.trim())}
+                placeholder="paste payload.signature key"
+                className={`w-full rounded-2xl border px-4 py-3 text-xs sm:text-sm font-mono outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400'}`}
+              />
+            </div>
+            <button onClick={submitUser} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">
+              פתח את האפליקציה
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>קוד ניהול מקומי</label>
+              <input
+                type="text"
+                dir="ltr"
+                value={adminCode}
+                onChange={e => setAdminCode(e.target.value)}
+                className={`w-full rounded-2xl border px-4 py-3 text-sm font-mono outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-400'}`}
+              />
+            </div>
+            <div className={`rounded-2xl border p-4 text-sm leading-relaxed ${dark ? 'bg-amber-900/20 border-amber-800/40 text-amber-100' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+              קוד הניהול בגרסה המקומית נשמר בתוך הלקוח לצורכי פיתוח. כשתרצה לעבור למערכת אמיתית, נחליף זאת בשרת ובמסד נתונים.
+            </div>
+            <button onClick={submitAdmin} className="w-full rounded-2xl bg-gradient-to-l from-slate-700 to-slate-900 text-white font-bold py-3.5 hover:shadow-lg transition-all">
+              כניסה למסך ניהול
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-rose-900/30 border-rose-700/50 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <div className={`rounded-[2rem] border shadow-sm p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+          <h3 className={`text-lg font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>משתמשי דמו לבדיקה</h3>
+          <p className={`text-sm mb-4 ${dark ? 'text-slate-300' : 'text-slate-600'}`}>הכנתי שלושה משתמשים פיקטיביים פעילים, עם שמות משתמשים ומפתחות מלאים, כדי שאפשר יהיה לבדוק את המערכת מקצה לקצה כבר עכשיו.</p>
+          <div className="space-y-3">
+            {activeDemoLicenses.map(record => (
+              <div key={record.id} className={`rounded-2xl border p-4 ${dark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <p className={`font-bold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>{record.displayName}</p>
+                    <p className={`text-xs font-mono ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{record.username}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setMode('user');
+                      setUsername(record.username);
+                      setKey(record.key);
+                      setError('');
+                    }}
+                    className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
+                  >
+                    טען לטופס
+                  </button>
+                </div>
+                <p className={`text-[11px] leading-relaxed break-all font-mono ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{record.key}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={`rounded-[2rem] border shadow-sm p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+          <h3 className={`text-lg font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>מה הגרסה הזו כוללת</h3>
+          <div className={`space-y-2 text-sm leading-relaxed ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p>• הקצאת שמות משתמשים ומפתחות בפורמט payload.signature</p>
+            <p>• מסך ניהול מקומי ליצירה, חידוש, ביטול ומחיקה</p>
+            <p>• בדיקה עצמית אוטומטית של זרימות הצלחה וכישלון</p>
+            <p>• שמירת נתונים מקומית בדפדפן כדי שאפשר יהיה לעבוד מיד</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleRecord, onRenewRecord, onDeleteRecord, onResetDemo, onUseRecord, onOpenLearning, dark }: {
+  records: LicenseRecord[];
+  report: LicenseSelfTestReport;
+  onRunSelfTest: () => LicenseSelfTestReport;
+  onCreateRecord: (input: { username: string; displayName: string; companyId: string; daysValid: number; notes?: string }) => LicenseRecord;
+  onToggleRecord: (recordId: string) => void;
+  onRenewRecord: (recordId: string, days?: number) => void;
+  onDeleteRecord: (recordId: string) => void;
+  onResetDemo: () => void;
+  onUseRecord: (recordId: string) => { ok: boolean; message?: string };
+  onOpenLearning: () => void;
+  dark: boolean;
+}) {
+  const [filter, setFilter] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [companyId, setCompanyId] = useState('');
+  const [daysValid, setDaysValid] = useState('30');
+  const [notes, setNotes] = useState('');
+  const [feedback, setFeedback] = useState('');
+
+  const activeCount = records.filter(record => computeRecordState(record) === 'active').length;
+  const expiredCount = records.filter(record => computeRecordState(record) === 'expired').length;
+  const revokedCount = records.filter(record => computeRecordState(record) === 'revoked').length;
+  const filteredRecords = records.filter(record => {
+    const query = filter.trim();
+    if (!query) return true;
+    return [record.displayName, record.username, record.companyId, record.notes || ''].some(value => value.toLowerCase().includes(query.toLowerCase()));
+  });
+
+  const createRecord = () => {
+    const validDays = Number(daysValid);
+    if (!displayName.trim() || !username.trim() || !companyId.trim() || !Number.isFinite(validDays) || validDays < 1) {
+      setFeedback('יש למלא שם, שם משתמש, מזהה ארגון ומשך תוקף חיובי.');
+      return;
+    }
+    const created = onCreateRecord({
+      displayName: displayName.trim(),
+      username: normalizeUsername(username),
+      companyId: companyId.trim().toUpperCase(),
+      daysValid: validDays,
+      notes,
+    });
+    setFeedback(`נוצר רישיון עבור ${created.displayName}.`);
+    setDisplayName('');
+    setUsername('');
+    setCompanyId('');
+    setDaysValid('30');
+    setNotes('');
+  };
+
+  return (
+    <div className="mt-4 sm:mt-6 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h2 className={`text-3xl font-extrabold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>ניהול רישיונות מקומי</h2>
+          <p className={`text-sm mt-1 ${dark ? 'text-slate-300' : 'text-slate-600'}`}>כל הנתונים כאן נשמרים ב־localStorage של הדפדפן. זו סביבת עבודה מלאה ליצירה, בדיקה ושיפור לפני חיבור לשרת אמיתי.</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onOpenLearning} className="rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 px-4 py-3 text-sm font-bold text-white hover:shadow-lg transition-all">פתח את האפליקציה</button>
+          <button onClick={onResetDemo} className={`rounded-2xl px-4 py-3 text-sm font-bold border ${dark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}>איפוס לדמו</button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: 'פעילים', value: activeCount, tone: dark ? 'bg-emerald-900/30 border-emerald-700/40 text-emerald-200' : 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+          { label: 'פגו תוקף', value: expiredCount, tone: dark ? 'bg-amber-900/30 border-amber-700/40 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-700' },
+          { label: 'מבוטלים', value: revokedCount, tone: dark ? 'bg-rose-900/30 border-rose-700/40 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-700' },
+        ].map(card => (
+          <div key={card.label} className={`rounded-3xl border p-5 ${card.tone}`}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2">{card.label}</p>
+            <p className="text-3xl font-extrabold">{card.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[0.9fr,1.1fr]">
+        <div className={`rounded-[2rem] border p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+          <h3 className={`text-xl font-extrabold mb-4 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>הקצאת משתמש חדש</h3>
+          <div className="space-y-3">
+            <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="שם מלא"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            <input value={username} onChange={e => setUsername(normalizeUsername(e.target.value))} dir="ltr" placeholder="username"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            <input value={companyId} onChange={e => setCompanyId(e.target.value.toUpperCase())} dir="ltr" placeholder="SCHOOL-1005"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            <input value={daysValid} onChange={e => setDaysValid(e.target.value)} dir="ltr" placeholder="30"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="הערות אופציונליות"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            <button onClick={createRecord} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">צור רישיון חדש</button>
+            {feedback && <div className={`rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-indigo-900/30 border-indigo-700/50 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>{feedback}</div>}
+          </div>
+        </div>
+
+        <div className={`rounded-[2rem] border p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h3 className={`text-xl font-extrabold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>בדיקות מערכת ורשימת משתמשים</h3>
+            <button onClick={() => setFeedback(onRunSelfTest().passed ? 'הבדיקה העצמית עברה בהצלחה.' : 'הבדיקה העצמית מצאה תקלות.')} className={`rounded-2xl px-4 py-3 text-sm font-bold ${report.passed ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>
+              הרץ בדיקה עצמית
+            </button>
+          </div>
+
+          <div className={`rounded-2xl border p-4 mb-4 ${report.passed ? (dark ? 'bg-emerald-900/20 border-emerald-700/40' : 'bg-emerald-50 border-emerald-200') : (dark ? 'bg-amber-900/20 border-amber-700/40' : 'bg-amber-50 border-amber-200')}`}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className={`font-bold ${report.passed ? (dark ? 'text-emerald-200' : 'text-emerald-700') : (dark ? 'text-amber-200' : 'text-amber-700')}`}>סטטוס בדיקה: {report.passed ? 'עבר' : 'נכשל'}</p>
+              <p className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{formatLicenseDate(report.runAt)}</p>
+            </div>
+            <div className="space-y-2">
+              {report.steps.map(step => (
+                <div key={step.name} className={`rounded-xl px-3 py-2 text-sm ${dark ? 'bg-slate-800/70 text-slate-200' : 'bg-white/70 text-slate-700'}`}>
+                  <span className={`font-bold ml-2 ${step.passed ? 'text-emerald-500' : 'text-rose-500'}`}>{step.passed ? '✔' : '✖'}</span>
+                  {step.name}
+                  <span className={`mr-2 text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>({step.details})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="חפש לפי שם, משתמש או ארגון"
+            className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none mb-4 ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+
+          <div className="space-y-3 max-h-[36rem] overflow-auto pr-1">
+            {filteredRecords.map(record => {
+              const state = computeRecordState(record);
+              const tone = state === 'active'
+                ? dark ? 'bg-emerald-900/20 border-emerald-700/30' : 'bg-emerald-50 border-emerald-200'
+                : state === 'expired'
+                  ? dark ? 'bg-amber-900/20 border-amber-700/30' : 'bg-amber-50 border-amber-200'
+                  : dark ? 'bg-rose-900/20 border-rose-700/30' : 'bg-rose-50 border-rose-200';
+
+              return (
+                <div key={record.id} className={`rounded-2xl border p-4 ${tone}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                    <div>
+                      <p className={`font-extrabold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>{record.displayName}</p>
+                      <p className={`text-xs font-mono ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{record.username}</p>
+                      <p className={`text-xs mt-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>ארגון: {record.companyId} · תוקף עד {formatLicenseDate(record.expires)}</p>
+                    </div>
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${state === 'active' ? 'bg-emerald-600 text-white' : state === 'expired' ? 'bg-amber-500 text-white' : 'bg-rose-600 text-white'}`}>{state === 'active' ? 'פעיל' : state === 'expired' ? 'פג תוקף' : 'מבוטל'}</span>
+                  </div>
+
+                  <div className={`rounded-xl px-3 py-2 text-[11px] leading-relaxed break-all font-mono mb-3 ${dark ? 'bg-slate-800/70 text-slate-300' : 'bg-white/80 text-slate-700'}`}>{record.key}</div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <button onClick={() => navigator.clipboard.writeText(record.key).catch(() => {})} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white">העתק מפתח</button>
+                    <button onClick={() => { const result = onUseRecord(record.id); if (!result.ok) setFeedback(result.message || 'לא ניתן לבצע התחברות.'); }} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">בדוק כניסה</button>
+                    <button onClick={() => onRenewRecord(record.id, 30)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">הארך 30 יום</button>
+                    <button onClick={() => onToggleRecord(record.id)} className={`rounded-xl px-3 py-2 text-xs font-bold text-white ${record.status === 'revoked' ? 'bg-amber-500' : 'bg-rose-600'}`}>{record.status === 'revoked' ? 'הפעל מחדש' : 'בטל רישיון'}</button>
+                    <button onClick={() => onDeleteRecord(record.id)} className="rounded-xl bg-slate-500 px-3 py-2 text-xs font-bold text-white">מחק</button>
+                  </div>
+
+                  <div className={`mt-3 text-xs ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    {record.notes || 'ללא הערות'}
+                    {record.lastUsedAt && <span className="mr-2">· שימוש אחרון: {formatLicenseDate(record.lastUsedAt)}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

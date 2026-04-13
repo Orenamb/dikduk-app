@@ -1,7 +1,7 @@
 // Service Worker — Niqqud Hebrew App
 // Network-first for HTML/navigation to avoid stale UI, cache-first for static assets.
 
-const CACHE_NAME = 'dikduk-v5';
+const CACHE_NAME = 'dikduk-v6';
 const APP_SHELL = [
   '/manifest.json',
 ];
