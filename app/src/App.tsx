@@ -1144,6 +1144,12 @@ export default function App() {
     localStorage.setItem('dikduk-mistakes', JSON.stringify(mistakes.slice(0, 100)));
   }, [mistakes]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [screen, lessonIdx]);
+
   const chapterIndexByLesson = (idx: number) => CHAPTERS.findIndex(c => idx >= c.startIdx && idx <= c.endIdx);
   const markWeakCurrentChapter = () => {
     const ci = chapterIndexByLesson(lessonIdx);
