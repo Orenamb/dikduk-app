@@ -1493,11 +1493,24 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
 }) {
   const [speakingWord, setSpeakingWord] = useState<string | null>(null);
   const [speechRate, setSpeechRate] = useState(1);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
   const style = colorStyles[slide.color] ?? colorStyles.blue;
   const ch    = CHAPTERS.find(c => idx >= c.startIdx && idx <= c.endIdx);
   const lessonInChapter = ch ? idx - ch.startIdx + 1 : idx + 1;
   const lessonsInChapter = ch ? ch.endIdx - ch.startIdx + 1 : total;
   const overallPct = ((idx + 1) / total) * 100;
+  
+  const handleTouchStart = (e: React.TouchEvent) => setTouchStart(e.touches[0].clientX);
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const diff = touchStart - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) onNext();
+      else onPrev();
+    }
+    setTouchStart(null);
+  };
+  
   const speak = (text: string, rate: number = 1, onEnd?: () => void) => {
     if (!window.speechSynthesis) return;
     speechSynthesis.cancel();
@@ -1510,7 +1523,7 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
   };
 
   return (
-    <div className="mt-4 sm:mt-6">
+    <div className="mt-4 sm:mt-6" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* Overall progress */}
       <div className="mb-5">
         <div className="flex justify-between items-center mb-1.5 text-xs sm:text-sm font-bold text-slate-400">
