@@ -851,6 +851,47 @@ const lessons: LessonSlide[] = [
     subContent: 'מלאכים טובים (רבים רגיל)\nמַלְאֲכֵי יְהוָה (רבים בסמיכות)\nשירים יפים (רבים רגיל)\nשִׁירֵי תְּהִלָּה (רבים בסמיכות)',
     tip: 'שאל: האם המילה "נשענת" על המילה הבאה? אם כן, כנראה סמיכות.',
   },
+  // ──── פרק ל"ז — פועל פ"י ────
+  {
+    chapter: 'פרק ל"ז — פועל פ"י', title: 'יו"ד יופי בדגש מפצה',
+    icon: <Crown size={52} className="text-cyan-200" />, color: 'cyan',
+    content: 'בפועל פ"י (שצורתו היסודית מתחילה ביו"ד יופי), היו"ד נחלשת לוי"ו או נבלעת.',
+    subContent: 'יוֹשֵׁב (פ"י) — כמו ישב\nיוֹצֵא (פ"י) — כמו יצא\nיִישַׁן (פ"י בדגש) — כמו ישן',
+    examples: [
+      { word: 'יוֹשֵׁב', explanation: 'בעל קטגוריה של פ"י — היו"ד מקורית', color: 'cyan' },
+      { word: 'יוֹדֵעַ', explanation: 'בעל קטגוריה של פ"י — יו"ד יופי בדגש', color: 'cyan' },
+    ],
+    tip: 'חפש יו"ד בהתחלה של הפועל + דגש = כנראה פ"י.',
+    mistake: 'כל פועל שמתחיל ביו"ד לא בהכרח הוא פ"י — צריך להסתכל על השורש.'
+  },
+  {
+    chapter: 'פרק ל"ז — פועל פ"י', title: 'תבניות של פ"י בבניינים',
+    icon: <Zap size={52} className="text-cyan-200" />, color: 'cyan',
+    content: 'בבניינים שונים, פ"י נראה בצורות שונות:',
+    subContent: 'קל: יוֹשֵׁב\nנִפְעַל: נוֹשַׂן\nהִפְעִיל: הוֹשִׁיב\nהִתְפַּעֵל: הִתְיוֹשְּׁבוּ',
+    tip: 'כל בנין של פ"י תחיל ביו"ד או בי + שוא (נִי-, הִי-, הוּ-) וכו\'',
+    mistake: 'אל תבלבל בין יו"ד יופי לבין יו"ד רגיל (כמו בעתיד מ-יִשְׁמוֹר).'
+  },
+  // ──── פרק ל"ח — פועל ע"ע ────
+  {
+    chapter: 'פרק ל"ח — פועל ע"ע (כפולים)', title: 'אות חוזרת בשורש',
+    icon: <Music size={52} className="text-pink-200" />, color: 'rose',
+    content: 'בפועל ע"ע (שורש כפול כמו סבב, שלל, נתן), האות השלישית שווה לאות השנייה.',
+    subContent: 'סָבַב (הד״ש וד״ש זהים — ב״ב)\nשָׁלַל (ל״ל זהים)\nנָתַן... לא, זה לא ע"ע (נ״ת״נ לא זהים)',
+    examples: [
+      { word: 'סָבַב', explanation: 'ע"ע — אות שלישית = שנייה (ב״ב)', color: 'rose' },
+      { word: 'שָׁלַל', explanation: 'ע"ע — אות שלישית = שנייה (ל״ל)', color: 'rose' },
+    ],
+    tip: 'אותיות אחרונות בשורש זהות? זה ע"ע.',
+  },
+  {
+    chapter: 'פרק ל"ח — פועל ע"ע (כפולים)', title: 'דגש מפצה ב-ע"ע',
+    icon: <Zap size={52} className="text-pink-200" />, color: 'rose',
+    content: 'כאשר נחלשת האות הכפולה, דגש וי"ו בשווא מפצים על ההשמטה:',
+    subContent: 'סָבַב → סִבְּבוּ (הושמר הדגש)\nסָב → סַבְּתִי (דגש מפצה וחריק)',
+    tip: 'אם רואים דגש חזק במקום אות משוננית? כנראה ע"ע.',
+    mistake: 'אל תשכח שדגש מפצה הוא מאפיין קריטי של ע"ע בכל הבניינים.'
+  },
 ];
 
 // ── Data: Chapter quiz + flashcards ──────────────────────────
@@ -940,6 +981,8 @@ const CHAPTERS: ChapterDef[] = [
   { label: 'פרק ל"ד — פועל ל"א',     desc: 'אל"ף סופית והשפעתה על ניקוד', icon: <span className="font-black text-indigo-600 text-sm">ל"א</span>, border: 'border-indigo-100', bg: 'bg-indigo-50', startIdx: 70, endIdx: 71 },
   { label: 'פרק ל"ה — הבינוני',      desc: 'קוֹטֵל וצורות בינוני בבניינים', icon: <span className="font-black text-teal-600 text-sm">קוֹ</span>, border: 'border-teal-100', bg: 'bg-teal-50', startIdx: 72, endIdx: 73 },
   { label: 'פרק ל"ו — סמיכות ברבים', desc: 'סיומת -ֵי ושינויי ניקוד', icon: <span className="font-black text-blue-600 text-sm">-ֵי</span>, border: 'border-blue-100', bg: 'bg-blue-50', startIdx: 74, endIdx: 75 },
+  { label: 'פרק ל"ז — פועל פ"י',      desc: 'יו"ד יופי בדגש מפצה', icon: <span className="font-black text-cyan-600 text-sm">י"י</span>, border: 'border-cyan-100', bg: 'bg-cyan-50', startIdx: 76, endIdx: 77 },
+  { label: 'פרק ל"ח — פועל ע"ע',      desc: 'כפולים ודגש מפצה', icon: <span className="font-black text-pink-600 text-sm">ע"ע</span>, border: 'border-pink-100', bg: 'bg-pink-50', startIdx: 78, endIdx: 79 },
 ];
 
 const FLASHCARDS = [
@@ -1013,7 +1056,7 @@ const WHY_TIPS: Record<string, string> = {
 };
 
 // ── Main App ──────────────────────────────────────────────────
-type Screen = 'home' | 'lesson' | 'quiz' | 'lab' | 'complete' | 'mixedquiz' | 'diagnostic' | 'daily' | 'mistakes';
+type Screen = 'home' | 'lesson' | 'quiz' | 'lab' | 'complete' | 'mixedquiz' | 'diagnostic' | 'daily' | 'mistakes' | 'summary';
 
 export default function App() {
   const [dark,       setDark]       = useState(() => localStorage.getItem('dikduk-dark') === '1');
@@ -1117,7 +1160,7 @@ export default function App() {
 
   const nextLesson = () => {
     const q = CHAPTER_QUIZZES[lessonIdx];
-    if (q) { setQuizData(q); setScreen('quiz'); return; }
+    if (q) { setQuizData(q); setScreen('summary'); return; }
     if (lessonIdx < lessons.length - 1) setLessonIdx(l => l + 1);
     else setScreen('complete');
   };
@@ -1133,6 +1176,7 @@ export default function App() {
 
   const goBack = () => {
     if (screen === 'quiz') { setScreen('lesson'); return; }
+    if (screen === 'summary') { setScreen('lesson'); return; }
     if (screen === 'lesson') { prevLesson(); return; }
     if (screen === 'mixedquiz') { setScreen('complete'); return; }
     setScreen('home');
@@ -1140,6 +1184,7 @@ export default function App() {
 
   const goForward = () => {
     if (screen === 'quiz') { continueAfterQuiz(); return; }
+    if (screen === 'summary') { setScreen('quiz'); return; }
     if (screen === 'lesson') { nextLesson(); return; }
     if (screen === 'home') { startLesson(lessonIdx > 0 ? lessonIdx : 0); return; }
     if (screen === 'complete') { setScreen('mixedquiz'); return; }
@@ -1241,6 +1286,7 @@ export default function App() {
       <main className="max-w-3xl mx-auto p-3 pb-28 sm:p-4 sm:pb-28 md:px-8 md:pt-8 md:pb-28">
         {screen === 'home'      && <HomeScreen onStart={startLesson} onHome={() => setScreen('home')} onLab={() => setScreen('lab')} onDiagnostic={() => setScreen('diagnostic')} onDaily={() => setScreen('daily')} onMistakes={() => setScreen('mistakes')} lessonIdx={lessonIdx} maxReached={maxReached} streak={streak} bookmarks={bookmarks} weakChapterIdxs={weakChapterIdxs} mistakesCount={mistakes.length} dark={dark} />}
         {screen === 'lesson'    && <LessonScreen slide={lessons[lessonIdx]} idx={lessonIdx} total={lessons.length} onNext={nextLesson} onPrev={prevLesson} bookmarked={bookmarks.includes(lessonIdx)} onBookmark={() => toggleBookmark(lessonIdx)} dark={dark} />}
+        {screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onBack={() => setScreen('lesson')} dark={dark} />}
         {screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('lesson')} onAnswered={(ok, picked) => {
           if (ok) {
             clearWeakCurrentChapter();
@@ -1642,11 +1688,49 @@ function LessonScreen({ slide, idx, total, onNext, onPrev, bookmarked, onBookmar
   );
 }
 
+function ChapterSummaryScreen({ idx, onStartQuiz, onBack, dark }: { idx: number; onStartQuiz: () => void; onBack: () => void; dark: boolean }) {
+  const chapter = CHAPTERS.find(c => idx >= c.startIdx && idx <= c.endIdx);
+  if (!chapter) return null;
+  const chapterLessons = lessons.slice(chapter.startIdx, chapter.endIdx + 1);
+
+  return (
+    <div className="mt-4 sm:mt-6 max-w-2xl mx-auto">
+      <div className={`rounded-3xl border shadow-xl p-6 sm:p-8 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+        <h2 className={`text-2xl sm:text-3xl font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>סיכום לפני בחינת פרק</h2>
+        <p className={`font-bold mb-5 ${dark ? 'text-indigo-300' : 'text-indigo-700'}`}>{chapter.label}</p>
+
+        <div className={`rounded-2xl p-4 sm:p-5 border mb-5 ${dark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-100'}`}>
+          <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${dark ? 'text-slate-300' : 'text-slate-500'}`}>נקודות לזכור</p>
+          <ul className="space-y-2">
+            {chapterLessons.map((l, i) => (
+              <li key={i} className={`text-sm sm:text-base leading-relaxed ${dark ? 'text-slate-200' : 'text-slate-700'}`}>
+                <span className="font-bold text-indigo-500 ml-2">•</span>
+                {l.title}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onBack} className={`flex-1 py-3 rounded-2xl font-bold transition-colors ${dark ? 'bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}>
+            חזרה לשיעור
+          </button>
+          <button onClick={onStartQuiz} className="flex-1 py-3 rounded-2xl font-bold bg-gradient-to-l from-indigo-600 to-violet-600 text-white hover:shadow-lg transition-all">
+            התחל בחינה 🧠
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Quiz View ─────────────────────────────────────────────────
 function QuizView({ quiz, onContinue, onBack, onAnswered, dark = false }: { quiz: ChapterQuiz; onContinue: () => void; onBack: () => void; onAnswered?: (ok: boolean, picked: number) => void; dark?: boolean }) {
   const [selected, setSelected] = useState<number | null>(null);
+  const [hintUsed, setHintUsed] = useState(false);
   const answered = selected !== null;
   const isCorrect = selected === quiz.correct;
+  const removable = quiz.opts.map((_, i) => i).filter(i => i !== quiz.correct).slice(0, 2);
 
   const pick = (i: number) => {
     if (answered) return;
@@ -1677,6 +1761,7 @@ function QuizView({ quiz, onContinue, onBack, onAnswered, dark = false }: { quiz
 
       <div className="space-y-3 mb-6 sm:mb-8">
         {quiz.opts.map((opt, i) => {
+          const hiddenByHint = hintUsed && !answered && removable.includes(i);
           let cls = 'w-full text-right p-4 sm:p-5 rounded-2xl border-2 font-bold text-base sm:text-lg transition-all ';
           if (!answered) {
             cls += dark ? 'bg-slate-700 border-slate-600 text-slate-100 hover:border-indigo-400 hover:bg-indigo-900/40 active:scale-98' : 'bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-98';
@@ -1688,12 +1773,12 @@ function QuizView({ quiz, onContinue, onBack, onAnswered, dark = false }: { quiz
             cls += dark ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-slate-50 border-slate-100 text-slate-400';
           }
           return (
-            <button key={i} className={cls} disabled={answered} onClick={() => pick(i)}>
+            <button key={i} className={cls} disabled={answered || hiddenByHint} onClick={() => pick(i)}>
               <span className="flex items-center gap-3">
                 {answered && i === quiz.correct && <CheckCircle size={20} className="text-emerald-600 flex-shrink-0" />}
                 {answered && i === selected && i !== quiz.correct && <X size={20} className="text-rose-600 flex-shrink-0" />}
                 {(!answered || (i !== quiz.correct && i !== selected)) && <span className="w-5 h-5 flex-shrink-0 rounded-full border-2 border-current opacity-30" />}
-                {opt}
+                {hiddenByHint ? <span className="opacity-60">(נפסל ברמז)</span> : opt}
               </span>
             </button>
           );
@@ -1725,6 +1810,12 @@ function QuizView({ quiz, onContinue, onBack, onAnswered, dark = false }: { quiz
       <div className="flex gap-3">
         <button onClick={onBack} className={`flex-shrink-0 font-bold px-4 py-4 rounded-2xl transition-all active:scale-95 text-sm ${dark ? 'bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
           חזרה לשיעור
+        </button>
+        <button
+          onClick={() => setHintUsed(true)}
+          disabled={answered || hintUsed}
+          className={`flex-shrink-0 font-bold px-4 py-4 rounded-2xl transition-all active:scale-95 text-sm ${answered || hintUsed ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : dark ? 'bg-amber-900/40 border border-amber-700 text-amber-200 hover:bg-amber-900/60' : 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100'}`}>
+          רמז ✨
         </button>
         <button disabled={!answered} onClick={onContinue}
           className={`flex-1 py-4 rounded-2xl text-lg font-bold transition-all ${answered ? 'bg-gradient-to-l from-indigo-600 to-violet-600 text-white hover:shadow-xl hover:-translate-y-0.5 shadow-lg' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
