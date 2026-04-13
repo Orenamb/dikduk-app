@@ -1214,6 +1214,7 @@ export default function App() {
 
   return (
     <div
+      data-version="2026-04-13-v5"
       className={`min-h-screen font-sans selection:bg-indigo-100 ${dark ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}
       dir="rtl">
       {/* Keyboard shortcuts overlay */}
