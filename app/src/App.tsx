@@ -1485,29 +1485,6 @@ export default function App() {
     return record;
   };
 
-  const importManagedLicenseByKey = (rawKey: string) => {
-    const key = rawKey.trim();
-    const parsed = parseLicenseKey(key);
-    if (!parsed) return { ok: false, message: 'המפתח שהודבק אינו תקין.' };
-    if (parsed.payload.product !== PRODUCT_CODE) return { ok: false, message: 'המפתח שייך למוצר אחר.' };
-
-    const imported: LicenseRecord = {
-      id: `${parsed.payload.username}-${parsed.payload.companyId}`,
-      username: parsed.payload.username,
-      displayName: parsed.payload.displayName,
-      companyId: parsed.payload.companyId,
-      product: parsed.payload.product,
-      issued: parsed.payload.issued,
-      expires: parsed.payload.expires,
-      status: 'active',
-      key,
-      notes: 'יובא ממכשיר אחר באמצעות מפתח חתום',
-    };
-
-    setLicenseRecords(prev => [imported, ...prev.filter(item => item.id !== imported.id && item.key !== imported.key)]);
-    return { ok: true, record: imported };
-  };
-
   const toggleManagedLicense = (recordId: string) => {
     setLicenseRecords(prev => prev.map(item => item.id === recordId
       ? changeLicenseStatus(item, item.status === 'revoked' ? 'active' : 'revoked')
@@ -1718,7 +1695,6 @@ export default function App() {
             report={licenseReport}
             onRunSelfTest={runManagedSelfTest}
             onCreateRecord={createManagedLicense}
-            onImportByKey={importManagedLicenseByKey}
             onToggleRecord={toggleManagedLicense}
             onRenewRecord={renewManagedLicense}
             onDeleteRecord={deleteManagedLicense}
@@ -1925,12 +1901,11 @@ function AdminAccessScreen({ onAdminLogin, dark }: {
   );
 }
 
-function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onImportByKey, onToggleRecord, onRenewRecord, onDeleteRecord, onUseRecord, onOpenLearning, dark }: {
+function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleRecord, onRenewRecord, onDeleteRecord, onUseRecord, onOpenLearning, dark }: {
   records: LicenseRecord[];
   report: LicenseSelfTestReport;
   onRunSelfTest: () => LicenseSelfTestReport;
   onCreateRecord: (input: { username: string; displayName: string; companyId: string; daysValid: number; notes?: string }) => LicenseRecord;
-  onImportByKey: (key: string) => { ok: boolean; message?: string; record?: LicenseRecord };
   onToggleRecord: (recordId: string) => void;
   onRenewRecord: (recordId: string, days?: number) => void;
   onDeleteRecord: (recordId: string) => void;
@@ -1944,7 +1919,6 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onImportB
   const [companyId, setCompanyId] = useState('');
   const [daysValid, setDaysValid] = useState('30');
   const [notes, setNotes] = useState('');
-  const [importKey, setImportKey] = useState('');
   const [feedback, setFeedback] = useState('');
 
   const activeCount = records.filter(record => computeRecordState(record) === 'active').length;
@@ -1975,20 +1949,6 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onImportB
     setCompanyId('');
     setDaysValid('30');
     setNotes('');
-  };
-
-  const importRecordByKey = () => {
-    if (!importKey.trim()) {
-      setFeedback('הדבק מפתח מלא כדי לייבא משתמש ממכשיר אחר.');
-      return;
-    }
-    const result = onImportByKey(importKey);
-    if (!result.ok || !result.record) {
-      setFeedback(result.message || 'לא ניתן לייבא את המפתח.');
-      return;
-    }
-    setFeedback(`המשתמש ${result.record.displayName} יובא בהצלחה.`);
-    setImportKey('');
   };
 
   return (
@@ -2051,12 +2011,6 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onImportB
                 className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
             </div>
             <button onClick={createRecord} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">צור רישיון חדש</button>
-            <div className={`rounded-2xl border p-3 ${dark ? 'border-slate-600 bg-slate-700/40' : 'border-slate-200 bg-slate-50'}`}>
-              <label className={`block text-xs sm:text-sm font-bold mb-1.5 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>ייבוא משתמש ממכשיר אחר (לפי מפתח)</label>
-              <textarea value={importKey} onChange={e => setImportKey(e.target.value)} rows={3} dir="ltr" placeholder="paste payload.signature key"
-                className={`w-full rounded-2xl border px-4 py-3 text-xs sm:text-sm font-mono outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
-              <button onClick={importRecordByKey} className="w-full mt-2 rounded-2xl bg-slate-900 text-white font-bold py-2.5 hover:shadow transition-all">ייבא לפי מפתח</button>
-            </div>
             {feedback && <div className={`rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-indigo-900/30 border-indigo-700/50 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>{feedback}</div>}
           </div>
         </div>
