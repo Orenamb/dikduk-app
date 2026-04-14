@@ -1215,6 +1215,7 @@ export default function App() {
   });
   const licenseRecordsRef = useRef<LicenseRecord[]>(licenseRecords);
   const skipNextSharedPushRef = useRef(false);
+  const pendingSharedSyncRef = useRef(false);
 
   // Persist UI prefs
   useEffect(() => { localStorage.setItem('dikduk-dark', dark ? '1' : '0'); }, [dark]);
@@ -1285,6 +1286,7 @@ export default function App() {
     const initSharedSync = async () => {
       const shared = await fetchSharedLicenses();
       if (canceled || shared === null) {
+        pendingSharedSyncRef.current = true;
         setSharedSyncReady(true);
         return;
       }
@@ -1292,8 +1294,12 @@ export default function App() {
       if (shared.length > 0) {
         skipNextSharedPushRef.current = true;
         setLicenseRecords(shared);
+        pendingSharedSyncRef.current = false;
       } else if (licenseRecordsRef.current.length > 0) {
-        await saveSharedLicenses(licenseRecordsRef.current);
+        const ok = await saveSharedLicenses(licenseRecordsRef.current);
+        pendingSharedSyncRef.current = !ok;
+      } else {
+        pendingSharedSyncRef.current = false;
       }
 
       setSharedSyncReady(true);
@@ -1309,12 +1315,17 @@ export default function App() {
       skipNextSharedPushRef.current = false;
       return;
     }
-    void saveSharedLicenses(licenseRecords);
+    pendingSharedSyncRef.current = true;
+    void (async () => {
+      const ok = await saveSharedLicenses(licenseRecords);
+      pendingSharedSyncRef.current = !ok;
+    })();
   }, [licenseRecords, sharedSyncReady]);
 
   useEffect(() => {
     if (!sharedSyncReady) return;
     const intervalId = window.setInterval(async () => {
+      if (pendingSharedSyncRef.current) return;
       const shared = await fetchSharedLicenses();
       if (!shared) return;
       const localSnapshot = JSON.stringify(licenseRecordsRef.current);
@@ -1326,6 +1337,17 @@ export default function App() {
     }, 4000);
 
     return () => window.clearInterval(intervalId);
+  }, [sharedSyncReady]);
+
+  useEffect(() => {
+    if (!sharedSyncReady) return;
+    const retryId = window.setInterval(async () => {
+      if (!pendingSharedSyncRef.current) return;
+      const ok = await saveSharedLicenses(licenseRecordsRef.current);
+      pendingSharedSyncRef.current = !ok;
+    }, 5000);
+
+    return () => window.clearInterval(retryId);
   }, [sharedSyncReady]);
 
   useEffect(() => {
