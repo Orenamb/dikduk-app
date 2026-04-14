@@ -1394,11 +1394,6 @@ export default function App() {
     setLicenseRecords(prev => prev.filter(item => item.id !== recordId));
   };
 
-  const clearManagedLicenses = () => {
-    setLicenseRecords([]);
-    setLicenseReport(runLicenseSelfTest());
-  };
-
   const impersonateManagedUser = (recordId: string) => {
     const target = licenseRecords.find(item => item.id === recordId);
     if (!target) return { ok: false, message: 'לא נמצא רישיון מתאים.' };
@@ -1593,7 +1588,6 @@ export default function App() {
             onToggleRecord={toggleManagedLicense}
             onRenewRecord={renewManagedLicense}
             onDeleteRecord={deleteManagedLicense}
-            onClearRecords={clearManagedLicenses}
             onUseRecord={impersonateManagedUser}
             onOpenLearning={goToLearningPortal}
             dark={dark}
@@ -1779,6 +1773,11 @@ function AdminAccessScreen({ onAdminLogin, dark }: {
           </button>
         </div>
 
+        <div className={`mt-4 rounded-2xl border px-4 py-3 text-xs sm:text-sm ${dark ? 'border-slate-700 bg-slate-900/40 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+          אם הדומיין `dikduk-admin.vercel.app` מבקש התחברות ל־Vercel, היכנס דרך:
+          <a href="https://dikduk-app.vercel.app/admin" dir="ltr" className="mr-1 underline font-bold">https://dikduk-app.vercel.app/admin</a>
+        </div>
+
         {error && (
           <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-rose-900/30 border-rose-700/50 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
             {error}
@@ -1789,7 +1788,7 @@ function AdminAccessScreen({ onAdminLogin, dark }: {
   );
 }
 
-function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleRecord, onRenewRecord, onDeleteRecord, onClearRecords, onUseRecord, onOpenLearning, dark }: {
+function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleRecord, onRenewRecord, onDeleteRecord, onUseRecord, onOpenLearning, dark }: {
   records: LicenseRecord[];
   report: LicenseSelfTestReport;
   onRunSelfTest: () => LicenseSelfTestReport;
@@ -1797,7 +1796,6 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleR
   onToggleRecord: (recordId: string) => void;
   onRenewRecord: (recordId: string, days?: number) => void;
   onDeleteRecord: (recordId: string) => void;
-  onClearRecords: () => void;
   onUseRecord: (recordId: string) => { ok: boolean; message?: string };
   onOpenLearning: () => void;
   dark: boolean;
@@ -1847,9 +1845,8 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleR
           <h2 className={`text-3xl font-extrabold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>ניהול רישיונות מקומי</h2>
           <p className={`text-sm mt-1 ${dark ? 'text-slate-300' : 'text-slate-600'}`}>כל הנתונים כאן נשמרים ב־localStorage של הדפדפן. זו סביבת עבודה מלאה ליצירה וניהול של משתמשים אמיתיים.</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={onOpenLearning} className="rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 px-4 py-3 text-sm font-bold text-white hover:shadow-lg transition-all">פתח את האפליקציה</button>
-          <button onClick={onClearRecords} className={`rounded-2xl px-4 py-3 text-sm font-bold border ${dark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}>נקה רשימה</button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <button onClick={onOpenLearning} className="w-full sm:w-auto rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 px-4 py-3 text-sm font-bold text-white hover:shadow-lg transition-all">פתח את האפליקציה</button>
         </div>
       </div>
 
@@ -1954,12 +1951,12 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleR
 
                   <div className={`rounded-xl px-3 py-2 text-[11px] leading-relaxed break-all font-mono mb-3 ${dark ? 'bg-slate-800/70 text-slate-300' : 'bg-white/80 text-slate-700'}`}>{record.key}</div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    <button onClick={() => navigator.clipboard.writeText(record.key).catch(() => {})} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white">העתק מפתח</button>
-                    <button onClick={() => { const result = onUseRecord(record.id); if (!result.ok) setFeedback(result.message || 'לא ניתן לבצע התחברות.'); }} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">בדוק כניסה</button>
-                    <button onClick={() => onRenewRecord(record.id, 30)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">הארך 30 יום</button>
-                    <button onClick={() => onToggleRecord(record.id)} className={`rounded-xl px-3 py-2 text-xs font-bold text-white ${record.status === 'revoked' ? 'bg-amber-500' : 'bg-rose-600'}`}>{record.status === 'revoked' ? 'הפעל מחדש' : 'בטל רישיון'}</button>
-                    <button onClick={() => onDeleteRecord(record.id)} className="rounded-xl bg-slate-500 px-3 py-2 text-xs font-bold text-white">מחק</button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2">
+                    <button onClick={() => navigator.clipboard.writeText(record.key).catch(() => {})} className="rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-bold text-white">העתק מפתח</button>
+                    <button onClick={() => { const result = onUseRecord(record.id); if (!result.ok) setFeedback(result.message || 'לא ניתן לבצע התחברות.'); }} className="rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-bold text-white">בדוק כניסה</button>
+                    <button onClick={() => onRenewRecord(record.id, 30)} className="rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">הארך 30 יום</button>
+                    <button onClick={() => onToggleRecord(record.id)} className={`rounded-xl px-3 py-2.5 text-sm font-bold text-white ${record.status === 'revoked' ? 'bg-amber-500' : 'bg-rose-600'}`}>{record.status === 'revoked' ? 'הפעל מחדש' : 'בטל רישיון'}</button>
+                    <button onClick={() => onDeleteRecord(record.id)} className="rounded-xl bg-slate-500 px-3 py-2.5 text-sm font-bold text-white">מחק</button>
                   </div>
 
                   <div className={`mt-3 text-xs ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
