@@ -1279,6 +1279,10 @@ export default function App() {
     window.location.assign('/');
   };
 
+  const goToAdminPortal = () => {
+    window.location.assign('/admin');
+  };
+
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     document.documentElement.scrollTop = 0;
@@ -1571,6 +1575,11 @@ export default function App() {
               <FlaskConical size={15} />
               <span>מעבדה</span>
             </button>
+            )}
+            {!adminRoute && (
+              <button onClick={goToAdminPortal} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold flex">
+                ניהול
+              </button>
             )}
           </div>
         </div>
