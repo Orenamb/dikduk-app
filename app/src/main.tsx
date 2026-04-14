@@ -11,7 +11,20 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    // Clear previously registered workers/caches to avoid stale API snapshots on mobile.
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(registration => {
+        void registration.unregister();
+      });
+    }).catch(() => {});
+
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        keys.forEach(key => {
+          void caches.delete(key);
+        });
+      }).catch(() => {});
+    }
   });
 }
 
