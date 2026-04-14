@@ -1,14 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { BlobNotFoundError, head, put } from '@vercel/blob';
+import { BlobNotFoundError, get, put } from '@vercel/blob';
 
 const LICENSE_STATE_PATH = 'licenses/state.json';
 
 async function readLicensesFromBlob(): Promise<unknown[]> {
   try {
-    const metadata = await head(LICENSE_STATE_PATH);
-    const response = await fetch(metadata.url, { cache: 'no-store' });
-    if (!response.ok) return [];
-    const payload = await response.json();
+    const result = await get(LICENSE_STATE_PATH, {
+      access: 'private',
+      useCache: false,
+    });
+    if (!result || result.statusCode !== 200) return [];
+    const payload = await new Response(result.stream).json();
     return Array.isArray(payload) ? payload : [];
   } catch (error) {
     if (error instanceof BlobNotFoundError) return [];
