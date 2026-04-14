@@ -1491,7 +1491,9 @@ export default function App() {
           <div className="flex items-center gap-2">
             <BookOpen size={22} className="text-indigo-200 hidden sm:block" />
             <div className="text-center">
-              <span className="block text-sm sm:text-base font-extrabold tracking-tight">מסע הדקדוק — מסורת הקריאה</span>
+              <span className="block text-sm sm:text-base font-extrabold tracking-tight">
+                {adminRoute ? 'פורטל ניהול — מסע הדקדוק' : 'מסע הדקדוק — מסורת הקריאה'}
+              </span>
               {authSession && <span className="block text-[11px] sm:text-xs text-indigo-100/80">{authSession.displayName}{authSession.role === 'admin' ? ' · מנהל' : ''}</span>}
             </div>
           </div>
