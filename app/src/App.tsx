@@ -1856,17 +1856,37 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleR
       <div className="grid gap-6 lg:grid-cols-[0.9fr,1.1fr]">
         <div className={`rounded-[2rem] border p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
           <h3 className={`text-xl font-extrabold mb-4 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>הקצאת משתמש חדש</h3>
+          <p className={`text-xs sm:text-sm mb-4 leading-relaxed ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
+            מלא את השדות לפי הסדר. לדוגמה: מזהה ארגון כמו <strong dir="ltr">SCHOOL-1005</strong>, ותוקף בימים כמו <strong>30</strong> (כלומר רישיון ל־30 יום).
+          </p>
           <div className="space-y-3">
-            <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="שם מלא"
-              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
-            <input value={username} onChange={e => setUsername(normalizeUsername(e.target.value))} dir="ltr" placeholder="username"
-              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
-            <input value={companyId} onChange={e => setCompanyId(e.target.value.toUpperCase())} dir="ltr" placeholder="SCHOOL-1005"
-              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
-            <input value={daysValid} onChange={e => setDaysValid(e.target.value)} dir="ltr" placeholder="30"
-              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="הערות אופציונליות"
-              className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            <div>
+              <label className={`block text-xs sm:text-sm font-bold mb-1.5 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>שם מלא של המשתמש</label>
+              <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="לדוגמה: אורן אמבר"
+                className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            </div>
+            <div>
+              <label className={`block text-xs sm:text-sm font-bold mb-1.5 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>שם משתמש להתחברות</label>
+              <input value={username} onChange={e => setUsername(normalizeUsername(e.target.value))} dir="ltr" placeholder="לדוגמה: oren.ambar"
+                className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            </div>
+            <div>
+              <label className={`block text-xs sm:text-sm font-bold mb-1.5 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>מזהה ארגון / לקוח</label>
+              <input value={companyId} onChange={e => setCompanyId(e.target.value.toUpperCase())} dir="ltr" placeholder="לדוגמה: SCHOOL-1005"
+                className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+              <p className={`mt-1 text-[11px] sm:text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>זה מזהה פנימי שלך ללקוח/בית ספר.</p>
+            </div>
+            <div>
+              <label className={`block text-xs sm:text-sm font-bold mb-1.5 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>תוקף הרישיון (בימים)</label>
+              <input value={daysValid} onChange={e => setDaysValid(e.target.value)} dir="ltr" placeholder="לדוגמה: 30"
+                className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+              <p className={`mt-1 text-[11px] sm:text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>30 = המשתמש יקבל גישה ל־30 יום.</p>
+            </div>
+            <div>
+              <label className={`block text-xs sm:text-sm font-bold mb-1.5 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>הערות פנימיות (אופציונלי)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="לדוגמה: משתמש ניסיון לכיתה א"
+                className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`} />
+            </div>
             <button onClick={createRecord} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">צור רישיון חדש</button>
             {feedback && <div className={`rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-indigo-900/30 border-indigo-700/50 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>{feedback}</div>}
           </div>
