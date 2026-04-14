@@ -1216,6 +1216,7 @@ export default function App() {
   const licenseRecordsRef = useRef<LicenseRecord[]>(licenseRecords);
   const skipNextSharedPushRef = useRef(false);
   const pendingSharedSyncRef = useRef(false);
+  const shouldPushSharedRef = useRef(false);
 
   // Persist UI prefs
   useEffect(() => { localStorage.setItem('dikduk-dark', dark ? '1' : '0'); }, [dark]);
@@ -1295,9 +1296,6 @@ export default function App() {
         skipNextSharedPushRef.current = true;
         setLicenseRecords(shared);
         pendingSharedSyncRef.current = false;
-      } else if (licenseRecordsRef.current.length > 0) {
-        const ok = await saveSharedLicenses(licenseRecordsRef.current);
-        pendingSharedSyncRef.current = !ok;
       } else {
         pendingSharedSyncRef.current = false;
       }
@@ -1315,10 +1313,13 @@ export default function App() {
       skipNextSharedPushRef.current = false;
       return;
     }
+    if (!shouldPushSharedRef.current) return;
+
     pendingSharedSyncRef.current = true;
     void (async () => {
       const ok = await saveSharedLicenses(licenseRecords);
       pendingSharedSyncRef.current = !ok;
+      if (ok) shouldPushSharedRef.current = false;
     })();
   }, [licenseRecords, sharedSyncReady]);
 
@@ -1343,8 +1344,10 @@ export default function App() {
     if (!sharedSyncReady) return;
     const retryId = window.setInterval(async () => {
       if (!pendingSharedSyncRef.current) return;
+      if (!shouldPushSharedRef.current) return;
       const ok = await saveSharedLicenses(licenseRecordsRef.current);
       pendingSharedSyncRef.current = !ok;
+      if (ok) shouldPushSharedRef.current = false;
     }, 5000);
 
     return () => window.clearInterval(retryId);
@@ -1479,24 +1482,30 @@ export default function App() {
     setQuizAnswered(false);
   };
 
+  const commitLicenseMutation = (updater: (prev: LicenseRecord[]) => LicenseRecord[]) => {
+    shouldPushSharedRef.current = true;
+    pendingSharedSyncRef.current = true;
+    setLicenseRecords(prev => updater(prev));
+  };
+
   const createManagedLicense = (input: { username: string; displayName: string; companyId: string; daysValid: number; notes?: string }) => {
     const record = createLicenseRecord(input);
-    setLicenseRecords(prev => [record, ...prev.filter(item => item.id !== record.id)]);
+    commitLicenseMutation(prev => [record, ...prev.filter(item => item.id !== record.id)]);
     return record;
   };
 
   const toggleManagedLicense = (recordId: string) => {
-    setLicenseRecords(prev => prev.map(item => item.id === recordId
+    commitLicenseMutation(prev => prev.map(item => item.id === recordId
       ? changeLicenseStatus(item, item.status === 'revoked' ? 'active' : 'revoked')
       : item));
   };
 
   const renewManagedLicense = (recordId: string, days = 30) => {
-    setLicenseRecords(prev => prev.map(item => item.id === recordId ? extendLicenseRecord(item, days) : item));
+    commitLicenseMutation(prev => prev.map(item => item.id === recordId ? extendLicenseRecord(item, days) : item));
   };
 
   const deleteManagedLicense = (recordId: string) => {
-    setLicenseRecords(prev => prev.filter(item => item.id !== recordId));
+    commitLicenseMutation(prev => prev.filter(item => item.id !== recordId));
   };
 
   const impersonateManagedUser = (recordId: string) => {
