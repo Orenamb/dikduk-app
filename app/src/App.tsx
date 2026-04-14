@@ -1149,6 +1149,32 @@ function formatLicenseDate(value: string): string {
   return new Date(value).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+const LICENSE_SYNC_API = '/api/licenses';
+
+async function fetchSharedLicenses(): Promise<LicenseRecord[] | null> {
+  try {
+    const response = await fetch(LICENSE_SYNC_API, { method: 'GET', cache: 'no-store' });
+    if (!response.ok) return null;
+    const payload = await response.json() as { records?: unknown };
+    return Array.isArray(payload.records) ? payload.records as LicenseRecord[] : [];
+  } catch {
+    return null;
+  }
+}
+
+async function saveSharedLicenses(records: LicenseRecord[]): Promise<boolean> {
+  try {
+    const response = await fetch(LICENSE_SYNC_API, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const adminRoute = isAdminPortalLocation(window.location.hostname, window.location.pathname);
   const [dark,       setDark]       = useState(() => localStorage.getItem('dikduk-dark') === '1');
@@ -1161,6 +1187,7 @@ export default function App() {
   });
   const [showKeys,   setShowKeys]   = useState(false);
   const [licenseRecords, setLicenseRecords] = useState<LicenseRecord[]>(() => readStoredLicenses());
+  const [sharedSyncReady, setSharedSyncReady] = useState(false);
   const [authSession, setAuthSession] = useState<LicenseSession | null>(() => readStoredSession());
   const [licenseReport, setLicenseReport] = useState<LicenseSelfTestReport>(() => runLicenseSelfTest());
   const [screen, setScreen]       = useState<Screen>(() => {
@@ -1186,11 +1213,14 @@ export default function App() {
       return [];
     }
   });
+  const licenseRecordsRef = useRef<LicenseRecord[]>(licenseRecords);
+  const skipNextSharedPushRef = useRef(false);
 
   // Persist UI prefs
   useEffect(() => { localStorage.setItem('dikduk-dark', dark ? '1' : '0'); }, [dark]);
   useEffect(() => { localStorage.setItem('dikduk-fs', String(fontScale)); }, [fontScale]);
   useEffect(() => { localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(licenseRecords)); }, [licenseRecords]);
+  useEffect(() => { licenseRecordsRef.current = licenseRecords; }, [licenseRecords]);
   useEffect(() => {
     if (authSession) localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(authSession));
     else localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -1248,6 +1278,55 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('dikduk-mistakes', JSON.stringify(mistakes.slice(0, 100)));
   }, [mistakes]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const initSharedSync = async () => {
+      const shared = await fetchSharedLicenses();
+      if (canceled || shared === null) {
+        setSharedSyncReady(true);
+        return;
+      }
+
+      if (shared.length > 0) {
+        skipNextSharedPushRef.current = true;
+        setLicenseRecords(shared);
+      } else if (licenseRecordsRef.current.length > 0) {
+        await saveSharedLicenses(licenseRecordsRef.current);
+      }
+
+      setSharedSyncReady(true);
+    };
+
+    initSharedSync();
+    return () => { canceled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!sharedSyncReady) return;
+    if (skipNextSharedPushRef.current) {
+      skipNextSharedPushRef.current = false;
+      return;
+    }
+    void saveSharedLicenses(licenseRecords);
+  }, [licenseRecords, sharedSyncReady]);
+
+  useEffect(() => {
+    if (!sharedSyncReady) return;
+    const intervalId = window.setInterval(async () => {
+      const shared = await fetchSharedLicenses();
+      if (!shared) return;
+      const localSnapshot = JSON.stringify(licenseRecordsRef.current);
+      const sharedSnapshot = JSON.stringify(shared);
+      if (localSnapshot !== sharedSnapshot) {
+        skipNextSharedPushRef.current = true;
+        setLicenseRecords(shared);
+      }
+    }, 4000);
+
+    return () => window.clearInterval(intervalId);
+  }, [sharedSyncReady]);
 
   useEffect(() => {
     if (adminRoute) {
