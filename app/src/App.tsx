@@ -1707,6 +1707,9 @@ function AccessScreen({ onUserLogin, dark }: {
           <button onClick={submitUser} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">
             פתח את האפליקציה
           </button>
+          <button onClick={() => window.location.assign('/admin')} className={`w-full rounded-2xl border py-3.5 text-sm font-bold transition-all ${dark ? 'border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600' : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+            מעבר לפורטל ניהול
+          </button>
         </div>
 
         {error && (
