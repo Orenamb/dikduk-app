@@ -1075,7 +1075,15 @@ const WHY_TIPS: Record<string, string> = {
 };
 
 // ── Main App ──────────────────────────────────────────────────
-type Screen = 'access' | 'admin' | 'home' | 'lesson' | 'quiz' | 'lab' | 'complete' | 'mixedquiz' | 'diagnostic' | 'daily' | 'mistakes' | 'summary';
+type Screen = 'access' | 'adminaccess' | 'admin' | 'home' | 'lesson' | 'quiz' | 'lab' | 'complete' | 'mixedquiz' | 'diagnostic' | 'daily' | 'mistakes' | 'summary';
+
+function isAdminPathname(pathname: string): boolean {
+  return /^\/admin\/?$/i.test(pathname);
+}
+
+function isAdminPortalLocation(hostname: string, pathname: string): boolean {
+  return hostname.toLowerCase().includes('dikduk-admin') || isAdminPathname(pathname);
+}
 
 function readStoredLicenses(): LicenseRecord[] {
   try {
@@ -1133,6 +1141,7 @@ function formatLicenseDate(value: string): string {
 }
 
 export default function App() {
+  const adminRoute = isAdminPortalLocation(window.location.hostname, window.location.pathname);
   const [dark,       setDark]       = useState(() => localStorage.getItem('dikduk-dark') === '1');
   const [fontScale,  setFontScale]  = useState(() => {
     const saved = parseInt(localStorage.getItem('dikduk-fs') || '100', 10);
@@ -1147,8 +1156,8 @@ export default function App() {
   const [licenseReport, setLicenseReport] = useState<LicenseSelfTestReport>(() => runLicenseSelfTest());
   const [screen, setScreen]       = useState<Screen>(() => {
     const session = readStoredSession();
-    if (!session) return 'access';
-    return session.role === 'admin' ? 'admin' : 'home';
+    if (isAdminPortalLocation(window.location.hostname, window.location.pathname)) return session?.role === 'admin' ? 'admin' : 'adminaccess';
+    return session?.role === 'user' ? 'home' : 'access';
   });
   const [lessonIdx, setLessonIdx] = useState(0);
   const [quizData, setQuizData]   = useState<ChapterQuiz | null>(null);
@@ -1232,11 +1241,20 @@ export default function App() {
   }, [mistakes]);
 
   useEffect(() => {
-    if (!authSession) {
+    if (adminRoute) {
+      if (!authSession || authSession.role !== 'admin') {
+        if (screen !== 'adminaccess') setScreen('adminaccess');
+      } else if (screen !== 'admin') {
+        setScreen('admin');
+      }
+      return;
+    }
+
+    if (!authSession || authSession.role !== 'user') {
       if (screen !== 'access') setScreen('access');
       return;
     }
-    if (authSession.role !== 'user') return;
+
     const result = validateLicenseAccess({
       username: authSession.username,
       key: authSession.key,
@@ -1246,7 +1264,11 @@ export default function App() {
       setAuthSession(null);
       setScreen('access');
     }
-  }, [authSession, licenseRecords, screen]);
+  }, [adminRoute, authSession, licenseRecords, screen]);
+
+  const goToLearningPortal = () => {
+    window.location.assign('/');
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -1282,7 +1304,11 @@ export default function App() {
     const touched = touchLicense(result.record, nowIso);
     setLicenseRecords(prev => prev.map(item => item.id === touched.id ? touched : item));
     setAuthSession(createSessionFromRecord(touched, nowIso));
-    setScreen('home');
+    if (adminRoute) {
+      goToLearningPortal();
+    } else {
+      setScreen('home');
+    }
     return { ok: true };
   };
 
@@ -1295,7 +1321,7 @@ export default function App() {
 
   const logout = () => {
     setAuthSession(null);
-    setScreen('access');
+    setScreen(adminRoute ? 'adminaccess' : 'access');
     setQuizData(null);
     setQuizAnswered(false);
   };
@@ -1335,7 +1361,7 @@ export default function App() {
     const touched = touchLicense(result.record, nowIso);
     setLicenseRecords(prev => prev.map(item => item.id === touched.id ? touched : item));
     setAuthSession(createSessionFromRecord(touched, nowIso));
-    setScreen('home');
+    goToLearningPortal();
     return { ok: true };
   };
 
@@ -1363,8 +1389,8 @@ export default function App() {
   };
 
   const goBack = () => {
-    if (screen === 'access') return;
-    if (screen === 'admin') { setScreen('home'); return; }
+    if (screen === 'access' || screen === 'adminaccess') return;
+    if (screen === 'admin') { goToLearningPortal(); return; }
     if (screen === 'quiz') { setScreen('summary'); return; }
     if (screen === 'summary') { setScreen('lesson'); return; }
     if (screen === 'lesson') { prevLesson(); return; }
@@ -1373,8 +1399,8 @@ export default function App() {
   };
 
   const goForward = () => {
-    if (screen === 'access') return;
-    if (screen === 'admin') { setScreen('home'); return; }
+    if (screen === 'access' || screen === 'adminaccess') return;
+    if (screen === 'admin') { goToLearningPortal(); return; }
     if (screen === 'quiz') { continueAfterQuiz(); return; }
     if (screen === 'summary') { continueAfterQuiz(); return; }
     if (screen === 'lesson') { nextLesson(); return; }
@@ -1387,6 +1413,7 @@ export default function App() {
 
   const bottomPrimaryAction = (() => {
     if (screen === 'access') return { label: 'כניסה', icon: '🔐', action: () => setScreen('access' as Screen), active: false };
+    if (screen === 'adminaccess') return { label: 'מנהל', icon: '🛡️', action: () => setScreen('adminaccess' as Screen), active: false };
     if (screen === 'admin') return { label: 'ללימוד', icon: '▶', action: () => setScreen('home'), active: false };
     if (screen === 'home') return { label: lessonIdx > 0 ? 'המשך' : 'התחל', icon: '▶', action: () => startLesson(lessonIdx > 0 ? lessonIdx : 0), active: false };
     if (screen === 'lesson') return { label: CHAPTER_QUIZZES[lessonIdx] ? 'לסיכום' : lessonIdx === lessons.length - 1 ? 'סיום' : 'הבא', icon: '⟵', action: nextLesson, active: true };
@@ -1420,7 +1447,7 @@ export default function App() {
 
   return (
     <div
-      data-version="2026-04-13-v6-license-local"
+      data-version="2026-04-14-v7-split-portals"
       className={`min-h-screen font-sans selection:bg-indigo-100 ${dark ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}
       dir="rtl">
       {/* Keyboard shortcuts overlay */}
@@ -1454,10 +1481,10 @@ export default function App() {
       <header className="bg-gradient-to-l from-indigo-900 to-violet-800 text-white px-4 py-3 shadow-xl sticky top-0 z-30">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-0.5">
-            <button onClick={goBack} disabled={screen === 'access'} className={`p-2.5 rounded-xl transition-colors active:scale-95 ${screen === 'access' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`} title="חזור">
+            <button onClick={goBack} disabled={screen === 'access' || screen === 'adminaccess'} className={`p-2.5 rounded-xl transition-colors active:scale-95 ${screen === 'access' || screen === 'adminaccess' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`} title="חזור">
               <ChevronRight size={22} />
             </button>
-            <button onClick={goForward} disabled={screen === 'access'} className={`p-2.5 rounded-xl transition-colors active:scale-95 ${screen === 'access' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`} title="קדימה">
+            <button onClick={goForward} disabled={screen === 'access' || screen === 'adminaccess'} className={`p-2.5 rounded-xl transition-colors active:scale-95 ${screen === 'access' || screen === 'adminaccess' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10'}`} title="קדימה">
               <ChevronLeft size={22} />
             </button>
           </div>
@@ -1485,9 +1512,9 @@ export default function App() {
             </button>
             {/* Shortcuts */}
             <button onClick={() => setShowKeys(k => !k)} className="hidden sm:flex p-2 rounded-xl hover:bg-white/10 transition-colors text-xs font-bold" title="קיצורי מקלדת (?)">?</button>
-            {authSession?.role === 'admin' && (
-              <button onClick={() => setScreen('admin')} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold hidden sm:flex">
-                ניהול
+            {adminRoute && authSession?.role === 'admin' && (
+              <button onClick={goToLearningPortal} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold hidden sm:flex">
+                ללומדים
               </button>
             )}
             {authSession && (
@@ -1495,7 +1522,7 @@ export default function App() {
                 יציאה
               </button>
             )}
-            {authSession && screen !== 'access' && (
+            {!adminRoute && authSession?.role === 'user' && screen !== 'access' && (
             <button onClick={() => setScreen('lab')} className="text-xs sm:text-sm bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl transition-colors font-bold flex items-center gap-1.5 hidden sm:flex">
               <FlaskConical size={15} />
               <span>מעבדה</span>
@@ -1506,8 +1533,9 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto p-3 pb-28 sm:p-4 sm:pb-28 md:px-8 md:pt-8 md:pb-28">
-        {screen === 'access'    && <AccessScreen onUserLogin={loginWithLicense} onAdminLogin={loginAsAdmin} demoLicenses={licenseRecords} dark={dark} />}
-        {screen === 'admin'     && authSession?.role === 'admin' && (
+        {!adminRoute && screen === 'access'    && <AccessScreen onUserLogin={loginWithLicense} demoLicenses={licenseRecords} dark={dark} />}
+        {adminRoute && screen === 'adminaccess' && <AdminAccessScreen onAdminLogin={loginAsAdmin} dark={dark} />}
+        {adminRoute && screen === 'admin'     && authSession?.role === 'admin' && (
           <AdminScreen
             records={licenseRecords}
             report={licenseReport}
@@ -1518,14 +1546,14 @@ export default function App() {
             onDeleteRecord={deleteManagedLicense}
             onResetDemo={resetManagedLicenses}
             onUseRecord={impersonateManagedUser}
-            onOpenLearning={() => setScreen('home')}
+            onOpenLearning={goToLearningPortal}
             dark={dark}
           />
         )}
-        {authSession && screen === 'home'      && <HomeScreen onStart={startLesson} onHome={() => setScreen('home')} onLab={() => setScreen('lab')} onDiagnostic={() => setScreen('diagnostic')} onDaily={() => setScreen('daily')} onMistakes={() => setScreen('mistakes')} lessonIdx={lessonIdx} maxReached={maxReached} streak={streak} bookmarks={bookmarks} weakChapterIdxs={weakChapterIdxs} mistakesCount={mistakes.length} dark={dark} />}
-        {authSession && screen === 'lesson'    && <LessonScreen slide={lessons[lessonIdx]} idx={lessonIdx} total={lessons.length} onNext={nextLesson} onPrev={prevLesson} bookmarked={bookmarks.includes(lessonIdx)} onBookmark={() => toggleBookmark(lessonIdx)} dark={dark} />}
-        {authSession && screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onSkip={continueAfterQuiz} onBack={() => setScreen('lesson')} dark={dark} />}
-        {authSession && screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('summary')} onAnswered={(ok, picked) => {
+        {!adminRoute && authSession?.role === 'user' && screen === 'home'      && <HomeScreen onStart={startLesson} onHome={() => setScreen('home')} onLab={() => setScreen('lab')} onDiagnostic={() => setScreen('diagnostic')} onDaily={() => setScreen('daily')} onMistakes={() => setScreen('mistakes')} lessonIdx={lessonIdx} maxReached={maxReached} streak={streak} bookmarks={bookmarks} weakChapterIdxs={weakChapterIdxs} mistakesCount={mistakes.length} dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'lesson'    && <LessonScreen slide={lessons[lessonIdx]} idx={lessonIdx} total={lessons.length} onNext={nextLesson} onPrev={prevLesson} bookmarked={bookmarks.includes(lessonIdx)} onBookmark={() => toggleBookmark(lessonIdx)} dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'summary'   && quizData && <ChapterSummaryScreen idx={lessonIdx} onStartQuiz={() => setScreen('quiz')} onSkip={continueAfterQuiz} onBack={() => setScreen('lesson')} dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'quiz'      && quizData && <QuizView quiz={quizData} onContinue={continueAfterQuiz} onBack={() => setScreen('summary')} onAnswered={(ok, picked) => {
           setQuizAnswered(true);
           if (ok) {
             clearWeakCurrentChapter();
@@ -1536,20 +1564,20 @@ export default function App() {
             setMistakes(prev => [{ at: new Date().toISOString(), chapter: quizData.chapter, question: quizData.q, selected: selectedText, correct: correctText }, ...prev]);
           }
         }} dark={dark} />}
-        {authSession && screen === 'lab'       && <LaboratoryView dark={dark} />}
-        {authSession && screen === 'diagnostic' && <DiagnosticScreen onBack={() => setScreen('home')} onDone={(score, total) => {
+        {!adminRoute && authSession?.role === 'user' && screen === 'lab'       && <LaboratoryView dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'diagnostic' && <DiagnosticScreen onBack={() => setScreen('home')} onDone={(score, total) => {
           const pct = Math.round((score / total) * 100);
           const idx = pct < 40 ? 0 : pct < 70 ? 24 : 43;
           startLesson(idx);
         }} dark={dark} />}
-        {authSession && screen === 'daily' && <DailyChallengeScreen onBack={() => setScreen('home')} onGoLab={() => setScreen('lab')} dark={dark} />}
-        {authSession && screen === 'mistakes' && <MistakesScreen mistakes={mistakes} onBack={() => setScreen('home')} onStart={startLesson} onClear={() => setMistakes([])} dark={dark} />}
-        {authSession && screen === 'complete'  && <CompleteScreen onRestart={() => startLesson(0)} onLab={() => setScreen('lab')} onMixedQuiz={() => setScreen('mixedquiz')} dark={dark} />}
-        {authSession && screen === 'mixedquiz' && <MixedQuiz onDone={() => setScreen('complete')} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'daily' && <DailyChallengeScreen onBack={() => setScreen('home')} onGoLab={() => setScreen('lab')} dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'mistakes' && <MistakesScreen mistakes={mistakes} onBack={() => setScreen('home')} onStart={startLesson} onClear={() => setMistakes([])} dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'complete'  && <CompleteScreen onRestart={() => startLesson(0)} onLab={() => setScreen('lab')} onMixedQuiz={() => setScreen('mixedquiz')} dark={dark} />}
+        {!adminRoute && authSession?.role === 'user' && screen === 'mixedquiz' && <MixedQuiz onDone={() => setScreen('complete')} />}
       </main>
 
       {/* ── Bottom Navigation Bar ── */}
-      {authSession && screen !== 'access' && screen !== 'admin' && (
+      {!adminRoute && authSession?.role === 'user' && screen !== 'access' && screen !== 'admin' && (
       <nav
         className={`fixed bottom-0 left-0 right-0 z-40 border-t ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -1584,28 +1612,19 @@ export default function App() {
   );
 }
 
-function AccessScreen({ onUserLogin, onAdminLogin, demoLicenses, dark }: {
+function AccessScreen({ onUserLogin, demoLicenses, dark }: {
   onUserLogin: (username: string, key: string) => { ok: boolean; message?: string };
-  onAdminLogin: (code: string) => { ok: boolean; message?: string };
   demoLicenses: LicenseRecord[];
   dark: boolean;
 }) {
-  const [mode, setMode] = useState<'user' | 'admin'>('user');
   const [username, setUsername] = useState('');
   const [key, setKey] = useState('');
-  const [adminCode, setAdminCode] = useState(ADMIN_ACCESS_CODE);
   const [error, setError] = useState('');
   const activeDemoLicenses = demoLicenses.filter(record => computeRecordState(record) === 'active').slice(0, 3);
 
   const submitUser = () => {
     setError('');
     const result = onUserLogin(username, key);
-    if (!result.ok) setError(result.message || 'לא ניתן להתחבר.');
-  };
-
-  const submitAdmin = () => {
-    setError('');
-    const result = onAdminLogin(adminCode);
     if (!result.ok) setError(result.message || 'לא ניתן להתחבר.');
   };
 
@@ -1618,73 +1637,36 @@ function AccessScreen({ onUserLogin, onAdminLogin, demoLicenses, dark }: {
           </div>
           <h2 className={`text-3xl sm:text-4xl font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>כניסה עם מפתח גישה</h2>
           <p className={`text-sm sm:text-base leading-relaxed max-w-xl mx-auto ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
-            זו גרסה מקומית מלאה עם ניהול רישיונות בדפדפן. אפשר להיכנס כלומד עם שם משתמש ומפתח, או כמנהל כדי ליצור ולבדוק משתמשים נוספים.
+            ברוכים הבאים לממשק הלומדים. הכניסה כאן מיועדת למשתמשים עם שם משתמש ומפתח תקף.
           </p>
         </div>
-
-        <div className={`inline-flex rounded-2xl p-1 mb-5 ${dark ? 'bg-slate-700' : 'bg-slate-100'}`}>
-          {[
-            { key: 'user', label: 'כניסת לומד' },
-            { key: 'admin', label: 'כניסת מנהל' },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => { setMode(tab.key as 'user' | 'admin'); setError(''); }}
-              className={`px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${mode === tab.key ? (dark ? 'bg-slate-900 text-white shadow' : 'bg-white text-slate-900 shadow') : (dark ? 'text-slate-300' : 'text-slate-500')}`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="space-y-4">
+          <div>
+            <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>שם משתמש</label>
+            <input
+              type="text"
+              dir="ltr"
+              value={username}
+              onChange={e => setUsername(normalizeUsername(e.target.value))}
+              placeholder="yael.cohen"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm font-medium outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400'}`}
+            />
+          </div>
+          <div>
+            <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>מפתח גישה</label>
+            <textarea
+              dir="ltr"
+              rows={4}
+              value={key}
+              onChange={e => setKey(e.target.value.trim())}
+              placeholder="paste payload.signature key"
+              className={`w-full rounded-2xl border px-4 py-3 text-xs sm:text-sm font-mono outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400'}`}
+            />
+          </div>
+          <button onClick={submitUser} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">
+            פתח את האפליקציה
+          </button>
         </div>
-
-        {mode === 'user' ? (
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>שם משתמש</label>
-              <input
-                type="text"
-                dir="ltr"
-                value={username}
-                onChange={e => setUsername(normalizeUsername(e.target.value))}
-                placeholder="yael.cohen"
-                className={`w-full rounded-2xl border px-4 py-3 text-sm font-medium outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400'}`}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>מפתח גישה</label>
-              <textarea
-                dir="ltr"
-                rows={4}
-                value={key}
-                onChange={e => setKey(e.target.value.trim())}
-                placeholder="paste payload.signature key"
-                className={`w-full rounded-2xl border px-4 py-3 text-xs sm:text-sm font-mono outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-400'}`}
-              />
-            </div>
-            <button onClick={submitUser} className="w-full rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white font-bold py-3.5 hover:shadow-lg transition-all">
-              פתח את האפליקציה
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>קוד ניהול מקומי</label>
-              <input
-                type="text"
-                dir="ltr"
-                value={adminCode}
-                onChange={e => setAdminCode(e.target.value)}
-                className={`w-full rounded-2xl border px-4 py-3 text-sm font-mono outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-400'}`}
-              />
-            </div>
-            <div className={`rounded-2xl border p-4 text-sm leading-relaxed ${dark ? 'bg-amber-900/20 border-amber-800/40 text-amber-100' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-              קוד הניהול בגרסה המקומית נשמר בתוך הלקוח לצורכי פיתוח. כשתרצה לעבור למערכת אמיתית, נחליף זאת בשרת ובמסד נתונים.
-            </div>
-            <button onClick={submitAdmin} className="w-full rounded-2xl bg-gradient-to-l from-slate-700 to-slate-900 text-white font-bold py-3.5 hover:shadow-lg transition-all">
-              כניסה למסך ניהול
-            </button>
-          </div>
-        )}
 
         {error && (
           <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-rose-900/30 border-rose-700/50 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
@@ -1707,7 +1689,6 @@ function AccessScreen({ onUserLogin, onAdminLogin, demoLicenses, dark }: {
                   </div>
                   <button
                     onClick={() => {
-                      setMode('user');
                       setUsername(record.username);
                       setKey(record.key);
                       setError('');
@@ -1732,6 +1713,58 @@ function AccessScreen({ onUserLogin, onAdminLogin, demoLicenses, dark }: {
             <p>• שמירת נתונים מקומית בדפדפן כדי שאפשר יהיה לעבוד מיד</p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminAccessScreen({ onAdminLogin, dark }: {
+  onAdminLogin: (code: string) => { ok: boolean; message?: string };
+  dark: boolean;
+}) {
+  const [adminCode, setAdminCode] = useState('');
+  const [error, setError] = useState('');
+
+  const submitAdmin = () => {
+    setError('');
+    const result = onAdminLogin(adminCode);
+    if (!result.ok) setError(result.message || 'לא ניתן להתחבר.');
+  };
+
+  return (
+    <div className="mt-6 max-w-lg mx-auto">
+      <div className={`rounded-[2rem] border shadow-xl p-6 sm:p-8 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-2xl mb-4">
+            <Shield size={34} />
+          </div>
+          <h2 className={`text-3xl font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>פורטל ניהול</h2>
+          <p className={`text-sm leading-relaxed ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
+            זהו ממשק נפרד לניהול משתמשים ורישיונות.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className={`block text-sm font-bold mb-2 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>קוד ניהול</label>
+            <input
+              type="password"
+              dir="ltr"
+              value={adminCode}
+              onChange={e => setAdminCode(e.target.value)}
+              className={`w-full rounded-2xl border px-4 py-3 text-sm font-mono outline-none transition-all ${dark ? 'bg-slate-700 border-slate-600 text-white focus:border-indigo-400' : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-400'}`}
+            />
+          </div>
+          <button onClick={submitAdmin} className="w-full rounded-2xl bg-gradient-to-l from-slate-700 to-slate-900 text-white font-bold py-3.5 hover:shadow-lg transition-all">
+            כניסה לניהול
+          </button>
+        </div>
+
+        {error && (
+          <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${dark ? 'bg-rose-900/30 border-rose-700/50 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+            {error}
+          </div>
+        )}
       </div>
     </div>
   );
