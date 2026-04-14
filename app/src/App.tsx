@@ -1276,6 +1276,10 @@ export default function App() {
     document.body.scrollTop = 0;
   }, [screen, lessonIdx]);
 
+  useEffect(() => {
+    document.title = adminRoute ? 'פורטל ניהול | מסע הדקדוק' : 'מסע הדקדוק | מסורת הקריאה';
+  }, [adminRoute]);
+
   const chapterIndexByLesson = (idx: number) => CHAPTERS.findIndex(c => idx >= c.startIdx && idx <= c.endIdx);
   const markWeakCurrentChapter = () => {
     const ci = chapterIndexByLesson(lessonIdx);
