@@ -13,10 +13,11 @@ import {
   computeRecordState,
   createAdminSession,
   createLicenseRecord,
-  createSeedLicenses,
   createSessionFromRecord,
   extendLicenseRecord,
   normalizeUsername,
+  parseLicenseKey,
+  PRODUCT_CODE,
   runLicenseSelfTest,
   touchLicense,
   validateLicenseAccess,
@@ -1085,14 +1086,22 @@ function isAdminPortalLocation(hostname: string, pathname: string): boolean {
   return hostname.toLowerCase().includes('dikduk-admin') || isAdminPathname(pathname);
 }
 
+function isLegacyDemoRecord(record: LicenseRecord): boolean {
+  const demoUsernames = ['yael.cohen', 'daniel.levi', 'michal.benami', 'itamar.haddad'];
+  const normalized = normalizeUsername(record.username || '');
+  if (demoUsernames.includes(normalized)) return true;
+  return /^SCH-100[1-4]$/i.test(record.companyId || '');
+}
+
 function readStoredLicenses(): LicenseRecord[] {
   try {
     const raw = localStorage.getItem(LICENSE_STORAGE_KEY);
-    if (!raw) return createSeedLicenses();
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed as LicenseRecord[] : createSeedLicenses();
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as LicenseRecord[]).filter(record => !isLegacyDemoRecord(record));
   } catch {
-    return createSeedLicenses();
+    return [];
   }
 }
 
@@ -1126,7 +1135,7 @@ function formatAccessError(reason: ReturnType<typeof validateLicenseAccess>['rea
     case 'username-mismatch':
       return 'שם המשתמש לא תואם למפתח.';
     case 'key-not-found':
-      return 'המפתח לא נמצא ברשימת הרישיונות המקומית.';
+      return 'המפתח תקין, אבל אין עבורו רשומה פעילה במכשיר זה.';
     case 'revoked':
       return 'הרישיון הזה בוטל.';
     case 'expired':
@@ -1303,7 +1312,42 @@ export default function App() {
   const loginWithLicense = (username: string, key: string) => {
     const nowIso = new Date().toISOString();
     const result = validateLicenseAccess({ username, key, licenses: licenseRecords, nowIso });
-    if (!result.ok || !result.record) return { ok: false, message: formatAccessError(result.reason) };
+    if (!result.ok || !result.record) {
+      // Allow first-time login with a valid signed key even if this device has no local record yet.
+      if (result.reason === 'key-not-found') {
+        const parsed = parseLicenseKey(key.trim());
+        const normalizedUsername = normalizeUsername(username);
+        if (
+          parsed &&
+          parsed.payload.username === normalizedUsername &&
+          parsed.payload.product === PRODUCT_CODE &&
+          new Date(parsed.payload.expires).getTime() >= new Date(nowIso).getTime()
+        ) {
+          const inferredRecord: LicenseRecord = {
+            id: `${parsed.payload.username}-${parsed.payload.companyId}`,
+            username: parsed.payload.username,
+            displayName: parsed.payload.displayName,
+            companyId: parsed.payload.companyId,
+            product: parsed.payload.product,
+            issued: parsed.payload.issued,
+            expires: parsed.payload.expires,
+            status: 'active',
+            key: key.trim(),
+            notes: 'נוצר אוטומטית מהתחברות עם מפתח חתום',
+          };
+
+          const touchedInferred = touchLicense(inferredRecord, nowIso);
+          setLicenseRecords(prev => {
+            const withoutSameKey = prev.filter(item => item.key !== touchedInferred.key && item.id !== touchedInferred.id);
+            return [touchedInferred, ...withoutSameKey];
+          });
+          setAuthSession(createSessionFromRecord(touchedInferred, nowIso));
+          setScreen('home');
+          return { ok: true };
+        }
+      }
+      return { ok: false, message: formatAccessError(result.reason) };
+    }
 
     const touched = touchLicense(result.record, nowIso);
     setLicenseRecords(prev => prev.map(item => item.id === touched.id ? touched : item));
@@ -1350,9 +1394,8 @@ export default function App() {
     setLicenseRecords(prev => prev.filter(item => item.id !== recordId));
   };
 
-  const resetManagedLicenses = () => {
-    const seeded = createSeedLicenses();
-    setLicenseRecords(seeded);
+  const clearManagedLicenses = () => {
+    setLicenseRecords([]);
     setLicenseReport(runLicenseSelfTest());
   };
 
@@ -1539,7 +1582,7 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto p-3 pb-28 sm:p-4 sm:pb-28 md:px-8 md:pt-8 md:pb-28">
-        {!adminRoute && screen === 'access'    && <AccessScreen onUserLogin={loginWithLicense} demoLicenses={licenseRecords} dark={dark} />}
+        {!adminRoute && screen === 'access'    && <AccessScreen onUserLogin={loginWithLicense} dark={dark} />}
         {adminRoute && screen === 'adminaccess' && <AdminAccessScreen onAdminLogin={loginAsAdmin} dark={dark} />}
         {adminRoute && screen === 'admin'     && authSession?.role === 'admin' && (
           <AdminScreen
@@ -1550,7 +1593,7 @@ export default function App() {
             onToggleRecord={toggleManagedLicense}
             onRenewRecord={renewManagedLicense}
             onDeleteRecord={deleteManagedLicense}
-            onResetDemo={resetManagedLicenses}
+            onClearRecords={clearManagedLicenses}
             onUseRecord={impersonateManagedUser}
             onOpenLearning={goToLearningPortal}
             dark={dark}
@@ -1618,15 +1661,13 @@ export default function App() {
   );
 }
 
-function AccessScreen({ onUserLogin, demoLicenses, dark }: {
+function AccessScreen({ onUserLogin, dark }: {
   onUserLogin: (username: string, key: string) => { ok: boolean; message?: string };
-  demoLicenses: LicenseRecord[];
   dark: boolean;
 }) {
   const [username, setUsername] = useState('');
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
-  const activeDemoLicenses = demoLicenses.filter(record => computeRecordState(record) === 'active').slice(0, 3);
 
   const submitUser = () => {
     setError('');
@@ -1635,7 +1676,7 @@ function AccessScreen({ onUserLogin, demoLicenses, dark }: {
   };
 
   return (
-    <div className="mt-4 sm:mt-8 max-w-4xl mx-auto grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
+    <div className="mt-4 sm:mt-8 max-w-2xl mx-auto">
       <div className={`rounded-[2rem] border shadow-xl p-6 sm:p-8 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-2xl mb-4">
@@ -1681,35 +1722,7 @@ function AccessScreen({ onUserLogin, demoLicenses, dark }: {
         )}
       </div>
 
-      <div className="space-y-4">
-        <div className={`rounded-[2rem] border shadow-sm p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-          <h3 className={`text-lg font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>משתמשי דמו לבדיקה</h3>
-          <p className={`text-sm mb-4 ${dark ? 'text-slate-300' : 'text-slate-600'}`}>הכנתי שלושה משתמשים פיקטיביים פעילים, עם שמות משתמשים ומפתחות מלאים, כדי שאפשר יהיה לבדוק את המערכת מקצה לקצה כבר עכשיו.</p>
-          <div className="space-y-3">
-            {activeDemoLicenses.map(record => (
-              <div key={record.id} className={`rounded-2xl border p-4 ${dark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div>
-                    <p className={`font-bold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>{record.displayName}</p>
-                    <p className={`text-xs font-mono ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{record.username}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setUsername(record.username);
-                      setKey(record.key);
-                      setError('');
-                    }}
-                    className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
-                  >
-                    טען לטופס
-                  </button>
-                </div>
-                <p className={`text-[11px] leading-relaxed break-all font-mono ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{record.key}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <div className="mt-4">
         <div className={`rounded-[2rem] border shadow-sm p-5 sm:p-6 ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
           <h3 className={`text-lg font-extrabold mb-2 ${dark ? 'text-slate-100' : 'text-slate-900'}`}>מה הגרסה הזו כוללת</h3>
           <div className={`space-y-2 text-sm leading-relaxed ${dark ? 'text-slate-300' : 'text-slate-600'}`}>
@@ -1776,7 +1789,7 @@ function AdminAccessScreen({ onAdminLogin, dark }: {
   );
 }
 
-function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleRecord, onRenewRecord, onDeleteRecord, onResetDemo, onUseRecord, onOpenLearning, dark }: {
+function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleRecord, onRenewRecord, onDeleteRecord, onClearRecords, onUseRecord, onOpenLearning, dark }: {
   records: LicenseRecord[];
   report: LicenseSelfTestReport;
   onRunSelfTest: () => LicenseSelfTestReport;
@@ -1784,7 +1797,7 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleR
   onToggleRecord: (recordId: string) => void;
   onRenewRecord: (recordId: string, days?: number) => void;
   onDeleteRecord: (recordId: string) => void;
-  onResetDemo: () => void;
+  onClearRecords: () => void;
   onUseRecord: (recordId: string) => { ok: boolean; message?: string };
   onOpenLearning: () => void;
   dark: boolean;
@@ -1832,11 +1845,11 @@ function AdminScreen({ records, report, onRunSelfTest, onCreateRecord, onToggleR
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h2 className={`text-3xl font-extrabold ${dark ? 'text-slate-100' : 'text-slate-900'}`}>ניהול רישיונות מקומי</h2>
-          <p className={`text-sm mt-1 ${dark ? 'text-slate-300' : 'text-slate-600'}`}>כל הנתונים כאן נשמרים ב־localStorage של הדפדפן. זו סביבת עבודה מלאה ליצירה, בדיקה ושיפור לפני חיבור לשרת אמיתי.</p>
+          <p className={`text-sm mt-1 ${dark ? 'text-slate-300' : 'text-slate-600'}`}>כל הנתונים כאן נשמרים ב־localStorage של הדפדפן. זו סביבת עבודה מלאה ליצירה וניהול של משתמשים אמיתיים.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={onOpenLearning} className="rounded-2xl bg-gradient-to-l from-indigo-600 to-violet-600 px-4 py-3 text-sm font-bold text-white hover:shadow-lg transition-all">פתח את האפליקציה</button>
-          <button onClick={onResetDemo} className={`rounded-2xl px-4 py-3 text-sm font-bold border ${dark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}>איפוס לדמו</button>
+          <button onClick={onClearRecords} className={`rounded-2xl px-4 py-3 text-sm font-bold border ${dark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}>נקה רשימה</button>
         </div>
       </div>
 
