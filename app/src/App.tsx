@@ -1287,7 +1287,8 @@ export default function App() {
     const initSharedSync = async () => {
       const shared = await fetchSharedLicenses();
       if (canceled || shared === null) {
-        pendingSharedSyncRef.current = true;
+        // Keep polling active even if first request failed (temporary mobile/network issues).
+        pendingSharedSyncRef.current = false;
         setSharedSyncReady(true);
         return;
       }
@@ -1344,7 +1345,10 @@ export default function App() {
     if (!sharedSyncReady) return;
     const retryId = window.setInterval(async () => {
       if (!pendingSharedSyncRef.current) return;
-      if (!shouldPushSharedRef.current) return;
+      if (!shouldPushSharedRef.current) {
+        pendingSharedSyncRef.current = false;
+        return;
+      }
       const ok = await saveSharedLicenses(licenseRecordsRef.current);
       pendingSharedSyncRef.current = !ok;
       if (ok) shouldPushSharedRef.current = false;
